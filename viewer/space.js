@@ -218,8 +218,9 @@ function pump() {
 }
 pump();
 
-// ── 极简操作：拖动环顾 + WASD（M1 只为看画面，不做碰撞） ──────
+// ── 极简操作：拖动环顾 + WASD 平移 + Q/E 升降 ──────────────
 let yaw = 0, pitch = 0, dragging = false, lastX = 0, lastY = 0;
+let camY = Number(q.get('y') ?? 3.0);      // 眼高，默认 3.0（spec §4）
 const keys = Object.create(null);
 
 const gate = $('gate');
@@ -246,7 +247,10 @@ renderer.domElement.addEventListener('pointermove', (e) => {
   lastX = e.clientX; lastY = e.clientY;
 });
 
-addEventListener('keydown', (e) => { keys[e.code] = true; });
+addEventListener('keydown', (e) => {
+  keys[e.code] = true;
+  if (e.code === 'Space') e.preventDefault();   // 别让空格滚页面
+});
 addEventListener('keyup', (e) => { keys[e.code] = false; });
 
 // ── 主循环 ─────────────────────────────────────────────────
@@ -268,12 +272,18 @@ function tick() {
   if (keys.KeyD || keys.ArrowRight) mx += 1;
   if (keys.KeyA || keys.ArrowLeft) mx -= 1;
 
+  let my = 0;
+  if (keys.KeyE || keys.Space) my += 1;
+  if (keys.KeyQ || keys.KeyC) my -= 1;
+
   if (mx || mz) {
     const len = Math.hypot(mx, mz);
     camera.position.addScaledVector(fwd, (mz / len) * speed * dt);
     camera.position.addScaledVector(right, (mx / len) * speed * dt);
   }
-  camera.position.y = 3.0;
+  if (my) camY = Math.max(0.5, Math.min(60, camY + my * speed * dt));
+
+  camera.position.y = camY;
   camera.rotation.set(pitch, yaw, 0);
 
   if ((hudFrame++ & 7) === 0) updateHud();
