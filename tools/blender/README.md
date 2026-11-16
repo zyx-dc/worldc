@@ -4,6 +4,29 @@
 
 已在 **Blender 5.2.3 LTS** 跑通。
 
+## 环境（2026-11-16 核验）
+
+**不需要安装任何 Blender 插件。** 这套管线只依赖 glTF 导出器，它在 Blender 里是内置且默认启用的。
+
+| 项 | 值 |
+|---|---|
+| Blender | 5.2.3 LTS（build 2026-10-22） |
+| glTF 导出 | `io_scene_gltf2` 内置，`bpy.ops.export_scene.gltf` 可用 |
+| numpy | 2.3.4（Blender 自带，天空贴图靠它算噪声） |
+| 第三方插件 | 无。`%APPDATA%/Blender Foundation/Blender/5.2/scripts/addons` 是空的 |
+
+核验命令（`--factory-startup` 是关键：证明在**不加载任何用户配置**的干净环境下也能工作）：
+
+```bash
+BLENDER="/c/Program Files/Blender Foundation/Blender 5.2/blender.exe"
+"$BLENDER" -b --factory-startup --python-expr "
+import bpy
+print('version', bpy.app.version_string)
+print('gltf', hasattr(bpy.ops.export_scene,'gltf'))
+print('addons', sorted(a.module for a in bpy.context.preferences.addons))"
+```
+
+
 ## 跑
 
 ```bash
@@ -28,7 +51,7 @@ BLENDER="/c/Program Files/Blender Foundation/Blender 5.2/blender.exe"
 | 文件 | 说明 | 实测 |
 |---|---|---|
 | `viewer/assets/space.glb` | 120 个平面，命名 `frame_<itemId>`，extras 带 item/region/hero，无材质 | 112 KB |
-| `viewer/assets/sky.jpg` | 4096×2048 equirect，星云 + 1.6 万星点 | 358 KB |
+| `viewer/assets/sky.jpg` | 4096×2048 equirect，星云 + 1.6 万星点 | 363 KB |
 | `build/space-layout.json` | id → 位置/旋转/尺寸/是否主画 | 52 KB |
 | `build/space-preview/preview.png` | Cycles 预览（可选） | 1600×900 / 48s ≈ 50 s |
 
@@ -41,7 +64,12 @@ BLENDER="/c/Program Files/Blender Foundation/Blender 5.2/blender.exe"
 4e5316d0…  out/b/space-layout.json
 0cc7c9bb…  out/a/space.glb
 0cc7c9bb…  out/b/space.glb
+cc16e027…  out/a/sky.jpg
+cc16e027…  out/b/sky.jpg
 ```
+
+> 仓库里的 `sky.jpg` 曾与脚本对不上（早期版本的产物，358 KB）。已用当前脚本重新生成，
+> 现在是 `cc16e027…` / 363 KB —— 与方案里写的体积一致。**改了脚本一定要重新生成资产再提交。**
 
 ## 参数在哪
 
