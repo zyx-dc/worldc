@@ -218,6 +218,161 @@ function pump() {
 }
 pump();
 
+// ── 水面：实时平面反射（spec 附录 A） ────────────────────────
+const WATER_ON = q.get('water') !== '0';
+const REFL_SCALE = Number(q.get('refl') ?? 0.5);   // 半分辨率
+
+const rtSize = new THREE.Vector2();
+renderer.getSize(rtSize);
+
+/** 从天空 equirect 的赤道那一行取平均色，用于水面远端雾色 —— 这样水天线不会出现硬接缝 */
+function skyHorizonColor(tex) {
+  const img = tex.image;
+  if (!img) return new THREE.Color(0x16293f);
+  try {
+    const c = document.createElement('canvas');
+    c.width = 128; c.height = 1;
+    const g = c.getContext('2d');
+    const bandH = Math.max(1, Math.round(img.height * 0.03));
+    g.drawImage(img, 0, Math.round(img.height * 0.5 - bandH / 2), img.width, bandH, 0, 0, 128, 1);
+    const d = g.getImageData(0, 0, 128, 1).data;
+    let r = 0, gg = 0, b = 0;
+    for (let i = 0; i < 128; i++) { r += d[i * 4]; gg += d[i * 4 + 1]; b += d[i * 4 + 2]; }
+    return new THREE.Color().setRGB(r / 128 / 255, gg / 128 / 255, b / 128 / 255, THREE.SRGBColorSpace);
+  } catch {
+    return new THREE.Color(0x16293f);
+  }
+}
+
+const reflRT = new THREE.WebGLRenderTarget(
+  Math.max(2, Math.floor(rtSize.x * REFL_SCALE)),
+  Math.max(2, Math.floor(rtSize.y * REFL_SCALE)),
+  { minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter, depthBuffer: true }
+);
+reflRT.texture.colorSpace = THREE.SRGBColorSpace;   // 采样即线性，输出不再重复编码
+
+const waterUniforms = {
+  tRefl: { value: reflRT.texture },
+  uTexMatrix: { value: new THREE.Matrix4() },
+  uDeep: { value: new THREE.Color(0x050b16) },
+  uFog: { value: skyHorizonColor(sky) },
+  uTime: { value: 0 },
+  uAmp: { value: 0.0026 },
+  uBlur: { value: 0.0035 },
+};
+
+const water = new THREE.Mesh(
+  new THREE.PlaneGeometry(6000, 6000),
+  new THREE.ShaderMaterial({
+    uniforms: waterUniforms,
+    transparent: true,
+    depthWrite: false,
+    vertexShader: `
+      uniform mat4 uTexMatrix;
+      varying vec4 vProj;
+      varying vec3 vWorld;
+      void main() {
+        vec4 wp = modelMatrix * vec4(position, 1.0);
+        vWorld = wp.xyz;
+        vProj = uTexMatrix * vec4(position, 1.0);
+        gl_Position = projectionMatrix * viewMatrix * wp;
+      }
+    `,
+    fragmentShader: `
+      uniform sampler2D tRefl;
+      uniform vec3 uDeep;
+      uniform vec3 uFog;
+      uniform float uTime;
+      uniform float uAmp;
+      uniform float uBlur;
+      varying vec4 vProj;
+      varying vec3 vWorld;
+      void main() {
+        vec2 p = vProj.xy / vProj.w;
+        float d = length(vWorld.xz - cameraPosition.xz);
+        float amp = uAmp / (1.0 + 0.045 * d);
+
+        // 横向波纹细碎，竖向拉得更长 —— 倒影才不会像一块镜面地板
+        p.x += sin(vWorld.z * 0.62 + uTime * 0.85) * amp;
+        p.y += cos(vWorld.x * 0.47 + uTime * 0.63) * amp * 2.4;
+
+        // 竖向 5 次采样：把亮画框摊成竖直光带
+        vec3 refl = vec3(0.0);
+        float wsum = 0.0;
+        for (int i = -2; i <= 2; i++) {
+          float fi = float(i);
+          float w = 1.0 - abs(fi) * 0.28;
+          vec2 uv = clamp(p + vec2(0.0, fi * uBlur), vec2(0.001), vec2(0.999));
+          refl += texture2D(tRefl, uv).rgb * w;
+          wsum += w;
+        }
+        refl = (refl / wsum) * 0.92;   // 水会吸收，倒影比实物略暗
+
+        vec3 V = normalize(cameraPosition - vWorld);
+        float fres = pow(1.0 - clamp(V.y, 0.0, 1.0), 2.0);
+        vec3 col = mix(uDeep, refl, 0.26 + 0.56 * fres);
+
+        // 远端渐隐为透明，让天空透出来 —— 比硬染色去接缝可靠得多
+        col = mix(col, uFog, smoothstep(40.0, 220.0, d) * 0.55);
+        float alpha = 1.0 - smoothstep(90.0, 330.0, d);
+        gl_FragColor = vec4(col, alpha);
+      }
+    `,
+  })
+);
+water.rotation.x = -Math.PI / 2;
+water.position.y = 0;
+water.visible = WATER_ON;
+scene.add(water);
+
+// 镜像相机
+const mirrorCam = new THREE.PerspectiveCamera();
+const N = new THREE.Vector3(0, 1, 0);
+const O = new THREE.Vector3(0, 0, 0);
+const _p = new THREE.Vector3();
+const _rot = new THREE.Matrix4();
+const _look = new THREE.Vector3();
+const _target = new THREE.Vector3();
+const _up = new THREE.Vector3();
+
+function updateMirror(camera, water) {
+  _p.setFromMatrixPosition(camera.matrixWorld);
+  if (_p.y <= 0.05) return false;                 // 相机到了水面以下就没有反射
+
+  mirrorCam.projectionMatrix.copy(camera.projectionMatrix);
+  mirrorCam.position.set(_p.x, -_p.y, _p.z);
+
+  _rot.extractRotation(camera.matrixWorld);
+  _look.set(0, 0, -1).applyMatrix4(_rot).add(_p);
+  _target.copy(O).sub(_look).reflect(N).negate().add(O);
+  _up.set(0, 1, 0).applyMatrix4(_rot).reflect(N);
+
+  mirrorCam.up.copy(_up);
+  mirrorCam.lookAt(_target);
+  mirrorCam.updateMatrixWorld();
+
+  const m = waterUniforms.uTexMatrix.value;
+  m.set(0.5, 0, 0, 0.5, 0, 0.5, 0, 0.5, 0, 0, 0.5, 0.5, 0, 0, 0, 1);
+  m.multiply(mirrorCam.projectionMatrix);
+  m.multiply(mirrorCam.matrixWorldInverse);
+  m.multiply(water.matrixWorld);
+  return true;
+}
+
+/** 把反射画面渲进 RT（渲染时藏掉水面，避免自己反射自己） */
+function renderReflection() {
+  if (!WATER_ON) return;
+  camera.updateMatrixWorld();
+  if (!updateMirror(camera, water)) return;
+
+  water.visible = false;
+  renderer.setRenderTarget(reflRT);
+  renderer.clear();
+  renderer.render(scene, mirrorCam);
+  renderer.setRenderTarget(null);
+  water.visible = true;
+}
+
 // ── 极简操作：拖动环顾 + WASD 平移 + Q/E 升降 ──────────────
 let yaw = 0, pitch = 0, dragging = false, lastX = 0, lastY = 0;
 let camY = Number(q.get('y') ?? 3.0);      // 眼高，默认 3.0（spec §4）
@@ -286,6 +441,9 @@ function tick() {
   camera.position.y = camY;
   camera.rotation.set(pitch, yaw, 0);
 
+  waterUniforms.uTime.value += dt;
+  renderReflection();
+
   if ((hudFrame++ & 7) === 0) updateHud();
   renderer.render(scene, camera);
   requestAnimationFrame(tick);
@@ -308,6 +466,9 @@ addEventListener('resize', () => {
   camera.aspect = innerWidth / innerHeight;
   camera.updateProjectionMatrix();
   renderer.setSize(innerWidth, innerHeight);
+  const s = new THREE.Vector2();
+  renderer.getSize(s);
+  reflRT.setSize(Math.max(2, Math.floor(s.x * REFL_SCALE)), Math.max(2, Math.floor(s.y * REFL_SCALE)));
 });
 
 tick();
