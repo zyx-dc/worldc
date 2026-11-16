@@ -26,6 +26,9 @@ node src/cli.mjs diff examples/my-favorites.world examples/my-favorites.tidied.w
 `import` 会写两个文件：`x.world`（**源码，请手改**）和 `x.items.json`（素材缓存）。
 `build` 会自动找同名的 `.items.json`，找不到才退回 mock 数据。
 
+> 仓库里**不含 `*.items.json`**：那里面是第三方内容（标题、封面地址），体积也大。
+> 想复现真实数据，自己跑一次 `import` 就行 —— 这也顺便证明了它是可重放的。
+
 打开 viewer 后点一下进入，**WASD 走，鼠标环顾，Shift 快走，R 自动前进**。
 
 录屏用的开关（拼在 URL 后面）：
