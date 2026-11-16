@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>WorldSource · 星海</title>
+<style>
+  :root { color-scheme: dark; }
+  html,body { margin:0; height:100%; background:#03060c; overflow:hidden;
+    font-family:"PingFang SC","Microsoft YaHei",system-ui,sans-serif; }
+  #app { position:fixed; inset:0; }
+  canvas { display:block; }
+
+  .hud { position:fixed; pointer-events:none; color:#dfe6ef; z-index:3; }
+  #brand { left:28px; top:24px; }
+  #brand .t { font-size:12px; letter-spacing:.18em; color:#5d6b80; }
+  #brand .w { font-size:16px; font-weight:500; margin-top:5px; letter-spacing:.02em; }
+
+  #where { left:28px; bottom:26px; }
+  #where .r { font-size:17px; font-weight:500; color:#cfd8e6; }
+  #where .m { font-size:11px; color:#5d6b80; margin-top:5px; letter-spacing:.08em; }
+
+  #hint { right:28px; bottom:26px; text-align:right; font-size:11px;
+    color:#4d5a6d; letter-spacing:.06em; line-height:1.9; }
+
+  #vig { position:fixed; inset:0; pointer-events:none; z-index:1;
+    background:radial-gradient(ellipse 78% 68% at 50% 46%, rgba(0,0,0,0) 42%, rgba(0,0,0,.55) 100%); }
+
+  #gate { position:fixed; inset:0; display:grid; place-content:center; gap:16px;
+    text-align:center; background:rgba(3,6,12,.94); cursor:pointer; z-index:10;
+    transition:opacity .4s; }
+  #gate.gone { opacity:0; pointer-events:none; }
+  #gate h1 { font-size:19px; font-weight:500; margin:0; color:#e8eef7; letter-spacing:.04em; }
+  #gate p { font-size:12px; color:#5d6b80; margin:0; line-height:2; }
+  #gate .k { color:#cfd8e6; border:.5px solid rgba(255,255,255,.22); border-radius:4px; padding:1px 7px; font-size:11px; }
+
+  #err { position:fixed; inset:0; display:none; place-content:center; padding:40px; color:#e0a0a0;
+    font:13px/1.7 ui-monospace,Consolas,monospace; white-space:pre-wrap; z-index:20; background:#03060c; }
+</style>
+</head>
+<body>
+<div id="app"></div>
+<div id="vig"></div>
+
+<div id="brand" class="hud">
+  <div class="t">WORLDSOURCE · 星海</div>
+  <div class="w" id="worldName">—</div>
+</div>
+
+<div id="where" class="hud">
+  <div class="r" id="regionName"></div>
+  <div class="m" id="regionMeta"></div>
+</div>
+
+<div id="hint" class="hud">
+  <span class="k">W A S D</span> 移动　<span class="k">拖动</span> 环顾
+</div>
+
+<div id="gate">
+  <h1>点击进入</h1>
+  <p>同一份收藏夹，永远同一片星海</p>
+</div>
+
+<div id="err"></div>
+
+<script type="module">
+  const showErr = (e) => {
+    const el = document.getElementById('err');
+    el.style.display = 'grid';
+    el.textContent = '渲染失败\n\n' + (e && e.stack ? e.stack : String(e)) +
+      '\n\n需要通过本地服务器访问（node serve.mjs）。';
+  };
+  window.addEventListener('error', (e) => showErr(e.error || e.message));
+  window.addEventListener('unhandledrejection', (e) => showErr(e.reason));
+</script>
+<script type="module" src="./space.js"></script>
+</body>
+</html>
