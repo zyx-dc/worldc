@@ -1,0 +1,87 @@
+// 零依赖静态服务器 + B站封面图代理（CDN 没给 CORS 头，只能服务端转一手）。
+// node serve.mjs [port]
+
+import { createServer } from 'node:http';
+import { readFile, writeFile, mkdir } from 'node:fs/promises';
+import { extname, join, normalize } from 'node:path';
+import { createHash } from 'node:crypto';
+
+const root = process.cwd();
+const port = Number(process.argv[2] || 5173);
+const COVER_DIR = join(root, 'cache', 'covers');
+
+const MIME = {
+  '.html': 'text/html; charset=utf-8',
+  '.js': 'text/javascript; charset=utf-8',
+  '.mjs': 'text/javascript; charset=utf-8',
+  '.json': 'application/json; charset=utf-8',
+  '.svg': 'image/svg+xml',
+  '.css': 'text/css; charset=utf-8',
+  '.png': 'image/png',
+  '.jpg': 'image/jpeg',
+  '.jpeg': 'image/jpeg',
+  '.webp': 'image/webp',
+  '.gif': 'image/gif',
+};
+
+// 只代理 B站图片 CDN，避免变成开放代理
+const ALLOWED_IMG = /^https:\/\/[a-z0-9-]+\.hdslb\.com\//i;
+
+async function proxyImage(u, res) {
+  if (!ALLOWED_IMG.test(u)) { res.writeHead(403).end('host not allowed'); return; }
+
+  const m = u.match(/\.(jpe?g|png|webp|gif)(?:\?|$)/i);
+  const ext = m ? m[1].toLowerCase().replace('jpeg', 'jpg') : 'jpg';
+  const key = createHash('sha1').update(u).digest('hex');
+  const file = join(COVER_DIR, `${key}.${ext}`);
+
+  let buf;
+  try {
+    buf = await readFile(file);
+  } catch {
+    const r = await fetch(u, {
+      headers: { 'User-Agent': 'Mozilla/5.0', Referer: 'https://www.bilibili.com/' },
+    });
+    if (!r.ok) { res.writeHead(502).end('upstream ' + r.status); return; }
+    buf = Buffer.from(await r.arrayBuffer());
+    await mkdir(COVER_DIR, { recursive: true });
+    await writeFile(file, buf);   // 落盘缓存：断网也能再打开
+  }
+
+  res.writeHead(200, {
+    'Content-Type': MIME['.' + ext] || 'image/jpeg',
+    'Cache-Control': 'public, max-age=604800',
+  });
+  res.end(buf);
+}
+
+createServer(async (req, res) => {
+  try {
+    const url = new URL(req.url, 'http://x');
+    const p0 = decodeURIComponent(url.pathname);
+
+    if (p0 === '/img') { await proxyImage(url.searchParams.get('u') || '', res); return; }
+
+    // 根路径必须真的跳到 /viewer/，否则浏览器 base URL 是 /，
+    // 页面里的 ./main.js 会解析成 /main.js 而 404（模块加载失败是静默的）。
+    if (p0 === '/' || p0 === '/viewer') {
+      res.writeHead(302, { Location: '/viewer/' }).end();
+      return;
+    }
+
+    let p = p0.endsWith('/') ? p0 + 'index.html' : p0;
+    const file = normalize(join(root, p));
+    if (!file.startsWith(root)) { res.writeHead(403).end('forbidden'); return; }
+
+    const buf = await readFile(file);
+    res.writeHead(200, {
+      'Content-Type': MIME[extname(file).toLowerCase()] || 'application/octet-stream',
+      'Cache-Control': 'no-store',
+    });
+    res.end(buf);
+  } catch {
+    res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' }).end('404 ' + req.url);
+  }
+}).listen(port, '127.0.0.1', () => {
+  console.log(`worldc viewer → http://localhost:${port}/`);
+});

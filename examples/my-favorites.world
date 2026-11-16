@@ -1,0 +1,36 @@
+# 我的收藏夹 —— 一份完整的 .world 源文件
+# 注意：这里没有一行坐标。所有位置都是 (seed + region 规则 + item id) 推导出来的。
+# 只有你亲手挪过的那一件，才会被写进 pin。
+
+world "我的收藏夹" {
+  seed 0x3f9a2c
+  source "bilibili/fav/8848102"
+  items 120
+
+  region "前端考古" {
+    span 2015..2018
+    hue 210
+    layout grid 6 6
+  }
+
+  region "调参玄学" {
+    span 2019..2020
+    hue 28
+    layout grid 5 6
+  }
+
+  region "深夜补番" {
+    span 2021..2023
+    hue 285
+    layout grid 5 6
+  }
+
+  region "AI 元年" {
+    span 2024..2026
+    hue 160
+    layout grid 4 6
+  }
+
+  # 覆盖层：这一件我不满意机器给我的位置，手动钉在这里
+  pin item:42 at -3.2 0 -1.5 rot 30
+}

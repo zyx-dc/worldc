@@ -1,0 +1,39 @@
+# 由 worldc import 生成 —— 这是一份源码，不是场景。
+# 想改世界就改这个文件，然后重新 build。改一行不会动到别的展品。
+# 源：泛式生贺合集（bilibili/fav/1172134631?mid=63231）
+# 120 件 · 2024-01 ~ 2026-02
+
+world "泛式生贺合集" {
+  seed 0xccd9e9a5
+  source "bilibili/fav/1172134631?mid=63231"
+  items 120
+
+  # 泛式生贺 · 2024-01 ~ 2024-02 · 30 件
+  region "泛式生贺" {
+    take 0..29
+    hue 210
+    layout grid 5 6
+  }
+
+  # 呜哇 · 2024-02 ~ 2025-02 · 30 件
+  region "呜哇" {
+    take 30..59
+    hue 28
+    layout grid 5 6
+  }
+
+  # live2d · 2025-02 ~ 2026-02 · 30 件
+  region "live2d" {
+    take 60..89
+    hue 285
+    layout grid 5 6
+  }
+
+  # mad · 2026-02 ~ 2026-02 · 30 件
+  region "mad" {
+    take 90..119
+    hue 160
+    layout grid 5 6
+  }
+
+}

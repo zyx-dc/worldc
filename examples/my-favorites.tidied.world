@@ -1,0 +1,36 @@
+# 同一个世界的第二个版本：我只是手动整理了 2 件展品
+# seed 没变 —— 所以另外 118 件一件都没动。这就是"增量"的含义。
+
+world "我的收藏夹" {
+  seed 0x3f9a2c
+  source "bilibili/fav/8848102"
+  items 120
+
+  region "前端考古" {
+    span 2015..2018
+    hue 210
+    layout grid 6 6
+  }
+
+  region "调参玄学" {
+    span 2019..2020
+    hue 28
+    layout grid 5 6
+  }
+
+  region "深夜补番" {
+    span 2021..2023
+    hue 285
+    layout grid 5 6
+  }
+
+  region "AI 元年" {
+    span 2024..2026
+    hue 160
+    layout grid 4 6
+  }
+
+  pin item:42 at -3.2 0 -1.5 rot 30
+  pin item:77 at 6.4 0 2.1 rot -12
+  pin item:91 at -6.4 0 3.8 rot 18
+}
