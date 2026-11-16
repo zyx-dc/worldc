@@ -98,6 +98,27 @@ test/determinism.mjs     架构承诺的可执行验证
 同一份 IR → 3D 漫游（three.js）+ 2D 导览图（SVG），数据一行不改
 ```
 
+## 星海模式（规划中）
+
+第三条后端：**Blender 建场 → glTF → three.js 实时漫游**。120 件收藏按种子随机散在一片静水上，
+每个展区一幅主画框，水面做实时平面反射；同一份收藏夹永远同一片星海。
+
+这与上面的「零资产」承诺不冲突：主链路仍然是纯程序；星海模式的 glb 与天空贴图都由脚本生成，
+随世界重新生成，仓库里只放一份 demo 产物（glb 112 KB + sky 358 KB）。
+
+- 设计与验收：`docs/space-mode.md`
+- 生成脚本：`tools/blender/space_scene.py`
+- 预览：`docs/preview-space-entry.jpg`、`docs/preview-space-hero.jpg`
+
+```bash
+node src/cli.mjs build examples/bilibili-demo.world --out build/scene.json
+BLENDER="/c/Program Files/Blender Foundation/Blender 5.2/blender.exe"
+"$BLENDER" -b -P tools/blender/space_scene.py -- \
+  --ir build/scene.json --cache cache/covers --out viewer/assets --no-render
+```
+
+网页端 `viewer/space.html` 尚未实现。
+
 ## 四条承诺
 
 1. **写种子，不写坐标** —— 同一份源文件永远编译出同一个世界

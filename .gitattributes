@@ -3,3 +3,4 @@
 *.png binary
 *.jpg binary
 *.world text eol=lf
+*.glb binary
