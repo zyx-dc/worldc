@@ -396,7 +396,7 @@ function renderReflection() {
 }
 
 // ── 极简操作：拖动环顾 + WASD 平移 + Q/E 升降 ──────────────
-let yaw = 0, pitch = 0, dragging = false, lastX = 0, lastY = 0;
+let yaw = 0, pitch = Number(q.get('pitch') ?? 0), dragging = false, lastX = 0, lastY = 0;
 let camY = Number(q.get('y') ?? 3.0);      // 眼高，默认 3.0（spec §4）
 const keys = Object.create(null);
 

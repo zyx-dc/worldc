@@ -253,7 +253,7 @@ def make_sky(path, seed, W=4096, H=2048):
         ys = np.linspace(0, gh - 1, H)
         xs = np.linspace(0, gw - 1, W)
         y0 = np.floor(ys).astype(int); y1 = np.minimum(y0 + 1, gh - 1)
-        x0 = np.floor(xs).astype(int); x1 = np.minimum(x0 + 1, gw - 1)
+        x0 = np.floor(xs).astype(int); x1 = (x0 + 1) % gw   # 横向环绕，去掉 u=0/1 接缝
         fy = (ys - y0)[:, None]; fx = (xs - x0)[None, :]
         top = g[y0][:, x0] * (1 - fx) + g[y0][:, x1] * fx
         bot = g[y1][:, x0] * (1 - fx) + g[y1][:, x1] * fx
@@ -275,7 +275,12 @@ def make_sky(path, seed, W=4096, H=2048):
     indigo = np.array([0.070, 0.090, 0.200])
     mix = np.clip(value_noise(4, 8), 0, 1)[..., None]
     neb = teal[None, None, :] * mix + indigo[None, None, :] * (1 - mix)
-    sky = base + neb * mask[..., None] * 2.2
+
+    # 极点遮蔽：equirect 在天顶/天底会把横向结构压成放射状条纹（后面还会按行均值收敛）
+    # 注意 Blender 的 img.pixels 是从底部存的，数组第 0 行最终是图像底部，
+    # 所以两端都要处理，不能只压 v->0 那一头。
+    polar = np.maximum(np.clip(v / 0.22, 0, 1), np.clip((1.0 - v) / 0.22, 0, 1)) ** 1.6
+    sky = base + neb * mask[..., None] * 2.2 * polar[..., None]
 
     # 星点
     n = 16000
@@ -294,6 +299,17 @@ def make_sky(path, seed, W=4096, H=2048):
     pad = np.pad(sky, ((1, 1), (1, 1), (0, 0)), mode="wrap")
     sky = sum(k[i, j] * pad[i:i + H, j:j + W] for i in range(3) for j in range(3))
 
+    sky = np.clip(sky, 0, 1)
+
+    # 极点收敛：天顶处所有经线收束到一点，一个像素代表的立体角极小，
+    # 正确的值就是该行沿经度的平均。不做这一步，横向的星云与星点
+    # 会被压成从一个点发散的放射条纹。
+    rowmean = sky.mean(axis=1, keepdims=True)
+    w = np.maximum(
+        np.clip(1.0 - v / 0.32, 0.0, 1.0),
+        np.clip(1.0 - (1.0 - v) / 0.32, 0.0, 1.0),
+    ) ** 2.2
+    sky = sky * (1.0 - w[..., None]) + rowmean * w[..., None]
     sky = np.clip(sky, 0, 1)
     # sRGB → 线性，Blender 保存时会再编码回 sRGB
     lin = np.where(sky <= 0.04045, sky / 12.92, ((sky + 0.055) / 1.055) ** 2.4)
