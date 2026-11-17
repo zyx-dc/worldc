@@ -251,10 +251,13 @@ def make_sky(path, seed, W=4096, H=2048):
     def value_noise(gh, gw):
         g = rng.random((gh, gw))
         ys = np.linspace(0, gh - 1, H)
-        xs = np.linspace(0, gw - 1, W)
+        # 横向必须真正平铺：采样位置取 [0, gw) 而不是 [0, gw-1]，
+        # 否则最左列落在格点 0、最右列落在格点 gw-1，两者是不同的值 → u=0/1 接缝。
+        xs = np.arange(W, dtype=np.float64) * (gw / W)
         y0 = np.floor(ys).astype(int); y1 = np.minimum(y0 + 1, gh - 1)
-        x0 = np.floor(xs).astype(int); x1 = (x0 + 1) % gw   # 横向环绕，去掉 u=0/1 接缝
-        fy = (ys - y0)[:, None]; fx = (xs - x0)[None, :]
+        xf = np.floor(xs).astype(int)
+        x0 = xf % gw; x1 = (xf + 1) % gw
+        fy = (ys - y0)[:, None]; fx = (xs - xf)[None, :]
         top = g[y0][:, x0] * (1 - fx) + g[y0][:, x1] * fx
         bot = g[y1][:, x0] * (1 - fx) + g[y1][:, x1] * fx
         return top * (1 - fy) + bot * fy

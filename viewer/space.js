@@ -28,6 +28,10 @@ camera.position.set(Number(q.get('x') ?? 0), 3.0, Number(q.get('z') ?? 6));
 const sky = await new THREE.TextureLoader().loadAsync('./assets/sky.jpg');
 sky.mapping = THREE.EquirectangularReflectionMapping;
 sky.colorSpace = THREE.SRGBColorSpace;
+// 等距圆柱贴图必须横向重复寻址：否则 MIPMAP 在 u=0/1 处跨边界采样，
+// 会在天上留一条竖直的亮/暗缝。
+sky.wrapS = THREE.RepeatWrapping;
+sky.wrapT = THREE.ClampToEdgeWrapping;
 scene.background = sky;
 
 // ── IR 元数据：只用来查标题/封面/色相，坐标一律以 glb 为准 ────
@@ -396,7 +400,7 @@ function renderReflection() {
 }
 
 // ── 极简操作：拖动环顾 + WASD 平移 + Q/E 升降 ──────────────
-let yaw = 0, pitch = Number(q.get('pitch') ?? 0), dragging = false, lastX = 0, lastY = 0;
+let yaw = Number(q.get('yaw') ?? 0), pitch = Number(q.get('pitch') ?? 0), dragging = false, lastX = 0, lastY = 0;
 let camY = Number(q.get('y') ?? 3.0);      // 眼高，默认 3.0（spec §4）
 const keys = Object.create(null);
 
