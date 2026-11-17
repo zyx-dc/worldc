@@ -67,6 +67,15 @@ if arg("--cam", "entry") == "hero":
 HERO_W, HERO_H = 8.0, 4.5
 FRAME_W, FRAME_H = 1.6, 0.9
 
+# 散点参数（调视觉只改这里）
+# 原来 x±30、y+2..+34 是 60×32 一片，四簇完全糊成一条带；
+# 收紧到 24×16 之后，簇与簇之间才留得出空水。
+SCATTER_X = 12.0                 # 簇内横向半径
+SCATTER_Y_NEAR, SCATTER_Y_FAR = 2.0, 18.0   # 簇内纵深（锚点之后）
+MIN_DIST = 2.2                   # 拒绝采样的最小水平间距
+SIZE_MIN, SIZE_MAX = 0.45, 1.20  # 小画相对基准 1.6×0.9 的缩放
+HEIGHT_MIN, HEIGHT_MAX = 3.4, 12.5
+
 
 # ── 场景清空 ──────────────────────────────────────────────
 bpy.ops.wm.read_factory_settings(use_empty=True)
@@ -128,15 +137,15 @@ def layout():
                 continue
 
             # 在锚点后方随机撒点；拒绝采样保证不互相穿插
-            for _ in range(120):
-                x = ax + rnd.uniform(-30.0, 30.0)
-                y = ay + rnd.uniform(2.0, 34.0)
-                if all((x - px) ** 2 + (y - py) ** 2 > 2.4 ** 2 for px, py in placed):
+            for _ in range(160):
+                x = ax + rnd.uniform(-SCATTER_X, SCATTER_X)
+                y = ay + rnd.uniform(SCATTER_Y_NEAR, SCATTER_Y_FAR)
+                if all((x - px) ** 2 + (y - py) ** 2 > MIN_DIST ** 2 for px, py in placed):
                     break
             placed.append((x, y))
 
-            h = rnd.uniform(3.2, 15.5)
-            s = rnd.uniform(0.62, 1.9)
+            h = rnd.uniform(HEIGHT_MIN, HEIGHT_MAX)
+            s = rnd.uniform(SIZE_MIN, SIZE_MAX)
             out.append({
                 "item": e["item"], "region": region["name"], "hue": region["hue"],
                 "x": x, "y": y, "z": h, "rot": yaw_to_cam(x, y) + rnd.uniform(-0.09, 0.09),
