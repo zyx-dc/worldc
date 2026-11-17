@@ -227,7 +227,7 @@ function buildWorld(nextIr) {
       const panel = new THREE.Mesh(panelGeo, mat);
       panel.position.set(e.wx, 1.44, e.wz);
       panel.rotation.y = THREE.MathUtils.degToRad(e.rot || 0);
-      panel.userData = { title: e.title, year: e.year, item: e.item, owner: e.owner, region: r.name, pinned: e.pinned };
+      panel.userData = { title: e.title, year: e.year, item: e.item, owner: e.owner, region: r.name, pinned: e.pinned, centerZ: r.centerZ };
       worldRoot.add(panel);
       panels.push(panel);
 
@@ -422,7 +422,10 @@ renderer.domElement.addEventListener('pointerup', (e) => {
     if (dragObj.userData.dirty) {
       const d = dragObj.userData;
       const rot = Math.round(THREE.MathUtils.radToDeg(dragObj.rotation.y));
-      upsertPin(d.item, dragObj.position.x, dragObj.position.z, rot);
+      // pos[2] 是展区局部 z，而拖拽拿到的是世界 z —— 必须减掉 centerZ，
+      // 否则写回去的 pin 在重编译后会被再加一次 centerZ，落点跳开一整段展区。
+      const localZ = dragObj.position.z - d.centerZ;
+      upsertPin(d.item, dragObj.position.x, localZ, rot);
     }
     dragObj = null;
   }

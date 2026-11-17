@@ -4,6 +4,8 @@
 
 import * as THREE from './vendor/three.module.js';
 import { GLTFLoader } from './vendor/GLTFLoader.js';
+import { parseWorld } from '../src/parse.mjs';
+import { compile } from '../src/compile.mjs';
 
 const $ = id => document.getElementById(id);
 const q = new URLSearchParams(location.search);
@@ -34,6 +36,16 @@ const ir = await fetch('../build/scene.json').then(r => {
   return r.json();
 });
 $('worldName').textContent = ir.world;
+
+// ── 编辑模式数据 ──────────────────────────────────────────
+const EDIT = q.get('edit') === '1';
+let srcText = '';
+let editItems = [];
+
+if (EDIT) {
+  editItems = await fetch('../build/scene.items.json').then(r => (r.ok ? r.json() : []));
+  srcText = await fetch('../build/scene.world').then(r => (r.ok ? r.text() : ''));
+}
 
 const metaById = new Map();
 for (const r of ir.regions) {
@@ -171,6 +183,7 @@ gltf.scene.traverse((o) => {
   normal.set(0, 0, 1).applyQuaternion(mesh.getWorldQuaternion(tmpQ));
 
   const tint = new THREE.Color().setHSL(info.hue / 360, 0.5, 0.62, THREE.SRGBColorSpace);
+  const halos = [];
   for (const [f, opacity] of factors) {
     const sp = new THREE.Sprite(new THREE.SpriteMaterial({
       map: HALO,
@@ -183,9 +196,18 @@ gltf.scene.traverse((o) => {
     sp.position.copy(center).addScaledVector(normal, -0.3);
     sp.scale.set(size.x * f, size.y * f, 1);
     scene.add(sp);
+    halos.push(sp);
   }
 
-  panels.push({ mesh, id, hero, size, center: center.clone(), region: info.region });
+  panels.push({
+    mesh, id, hero, size,
+    center: center.clone(),
+    region: info.region,
+    halos,
+    basePos: mesh.position.clone(),
+    baseQuat: mesh.quaternion.clone(),
+    yaw: 0,
+  });
 });
 
 // ── 真实封面：并发 6，失败就保留程序化底图 ────────────────────
@@ -386,15 +408,72 @@ if (q.get('hud') === '0') {
   $('vig').style.display = 'none';
 }
 
+// 拖动画框（仅编辑模式）
+const ndc = new THREE.Vector2();
+const pickRay = new THREE.Raycaster();
+const dragPlane = new THREE.Plane();
+const hitPt = new THREE.Vector3();
+let dragPanel = null;
+
+function setNdc(e) {
+  const r = renderer.domElement.getBoundingClientRect();
+  ndc.x = ((e.clientX - r.left) / r.width) * 2 - 1;
+  ndc.y = -((e.clientY - r.top) / r.height) * 2 + 1;
+}
+
+function moveHalos(p) {
+  normal.copy(PLANE_FRONT).applyQuaternion(p.mesh.getWorldQuaternion(tmpQ));
+  for (const h of p.halos) h.position.copy(p.mesh.position).addScaledVector(normal, -0.3);
+}
+
 renderer.domElement.addEventListener('pointerdown', (e) => {
+  if (EDIT) {
+    setNdc(e);
+    pickRay.setFromCamera(ndc, camera);
+    const hit = pickRay.intersectObjects(panels.map(p => p.mesh), false)[0];
+    if (hit) {
+      dragPanel = panels.find(p => p.mesh === hit.object) || null;
+      if (dragPanel) {
+        // 在画框所在水平面上拖，不是 y=0 —— 画框挂得高，落点才不会飘
+        dragPlane.setFromNormalAndCoplanarPoint(UP, dragPanel.mesh.position);
+        dragPanel.mesh.userData.dirty = false;
+        renderer.domElement.setPointerCapture(e.pointerId);
+        return;
+      }
+    }
+  }
   dragging = true; lastX = e.clientX; lastY = e.clientY;
   renderer.domElement.setPointerCapture(e.pointerId);
 });
+
 renderer.domElement.addEventListener('pointerup', (e) => {
+  if (dragPanel) {
+    if (dragPanel.mesh.userData.dirty) {
+      upsertPin(
+        dragPanel.id,
+        dragPanel.mesh.position.x,
+        dragPanel.mesh.position.z,
+        Math.round(THREE.MathUtils.radToDeg(dragPanel.yaw))
+      );
+    }
+    dragPanel = null;
+  }
   dragging = false;
   try { renderer.domElement.releasePointerCapture(e.pointerId); } catch { /* 忽略 */ }
 });
+
 renderer.domElement.addEventListener('pointermove', (e) => {
+  if (dragPanel) {
+    setNdc(e);
+    pickRay.setFromCamera(ndc, camera);
+    if (pickRay.ray.intersectPlane(dragPlane, hitPt)) {
+      dragPanel.mesh.position.x = Math.max(-90, Math.min(90, hitPt.x));
+      dragPanel.mesh.position.z = Math.max(-140, Math.min(40, hitPt.z));
+      moveHalos(dragPanel);
+      dragPanel.mesh.userData.dirty = true;
+    }
+    return;
+  }
   if (!dragging) return;
   yaw -= (e.clientX - lastX) * 0.003;
   pitch -= (e.clientY - lastY) * 0.003;
@@ -403,10 +482,104 @@ renderer.domElement.addEventListener('pointermove', (e) => {
 });
 
 addEventListener('keydown', (e) => {
+  if (e.target && e.target.tagName === 'TEXTAREA') return;   // 编辑器里打字不要触发快捷键
   keys[e.code] = true;
   if (e.code === 'Space') e.preventDefault();   // 别让空格滚页面
+  if (e.code === 'Backquote') location.href = EDIT ? './?gate=0' : './?edit=1';
+  if (e.code === 'Escape' && EDIT) location.href = './?gate=0';
 });
 addEventListener('keyup', (e) => { keys[e.code] = false; });
+
+// ── 编辑：拖动写回 pin ────────────────────────────────────
+// 星海模式下 pin 的语义变了：pos[0]/pos[2] 直接是世界坐标（y 仍取 glb 高度），
+// 所以写回时不需要任何反变换，也就不会有旧 viewer 那种 centerZ 偏移。
+const fmt = n => String(Number(Number(n).toFixed(2)));
+const editorEl = $('editor');
+const ta = $('src');
+const estat = $('estat');
+
+const _yawQ = new THREE.Quaternion();
+const UP = new THREE.Vector3(0, 1, 0);
+let compileTimer = null;
+
+function applyPins(nextIr) {
+  const pinned = new Map();
+  for (const r of nextIr.regions) {
+    for (const e of r.exhibits) if (e.pinned) pinned.set(e.item, e);
+  }
+
+  for (const p of panels) {
+    const e = pinned.get(p.id);
+    if (e) {
+      p.yaw = THREE.MathUtils.degToRad(e.rot || 0);
+      p.mesh.position.set(e.pos[0], p.basePos.y, e.pos[2]);
+    } else {
+      p.yaw = 0;
+      p.mesh.position.copy(p.basePos);
+    }
+    p.mesh.quaternion.copy(p.baseQuat).premultiply(_yawQ.setFromAxisAngle(UP, p.yaw));
+
+    normal.copy(PLANE_FRONT).applyQuaternion(p.mesh.getWorldQuaternion(tmpQ));
+    for (const h of p.halos) h.position.copy(p.mesh.position).addScaledVector(normal, -0.3);
+  }
+  gltf.scene.updateMatrixWorld(true);
+}
+
+function setStatus(text, bad = false) {
+  if (!estat) return;
+  estat.textContent = text;
+  estat.classList.toggle('bad', bad);
+}
+
+function recompile() {
+  const t0 = performance.now();
+  try {
+    const w = parseWorld(srcText);
+    const { ir: next, hash, stats } = compile(w, editItems);
+    applyPins(next);
+    setStatus(`${hash.slice(0, 12)} · ${stats.pinned} 个 pin · ${Math.round(performance.now() - t0)} ms`);
+  } catch (e) {
+    setStatus(e.message, true);   // 语法错了只报错，世界保持上一个可用状态
+  }
+}
+
+function scheduleCompile(delay = 200) {
+  clearTimeout(compileTimer);
+  compileTimer = setTimeout(recompile, delay);
+}
+
+function upsertPin(itemId, x, z, rotDeg) {
+  const line = `  pin item:${itemId} at ${fmt(x)} 0 ${fmt(z)} rot ${rotDeg}`;
+  const re = new RegExp(`^[ \\t]*pin item:${itemId}\\b.*$`, 'm');
+  if (re.test(srcText)) srcText = srcText.replace(re, line);
+  else srcText = srcText.replace(/(\n)\s*\}\s*$/, `$1${line}\n}\n`);
+  if (ta) ta.value = srcText;
+  scheduleCompile(0);
+}
+
+async function saveSource() {
+  try {
+    const r = await fetch('/api/save', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ path: 'build/scene.world', src: srcText }),
+    });
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    setStatus('已保存到 build/scene.world');
+  } catch (e) {
+    setStatus(`保存失败：${e.message}`, true);
+  }
+}
+
+if (EDIT) {
+  if (ta) ta.value = srcText;
+  editorEl?.classList.add('on');
+  $('hint').style.display = 'none';
+  $('gate').style.display = 'none';      // 编辑模式下不要入场遮罩，否则整个画面被压暗
+  recompile();
+  ta?.addEventListener('input', () => { srcText = ta.value; scheduleCompile(); });
+  $('save')?.addEventListener('click', saveSource);
+}
 
 // ── 主循环 ─────────────────────────────────────────────────
 const clock = new THREE.Clock();
@@ -473,4 +646,10 @@ addEventListener('resize', () => {
 
 tick();
 
-window.space = { scene, camera, renderer, panels, gltf };
+window.space = {
+  scene, camera, renderer, panels, gltf,
+  recompile, applyPins, upsertPin,
+  get src() { return srcText; },
+  set src(v) { srcText = v; if (ta) ta.value = v; recompile(); },
+  editor: ta,
+};

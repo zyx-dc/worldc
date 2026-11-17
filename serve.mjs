@@ -3,7 +3,7 @@
 
 import { createServer } from 'node:http';
 import { readFile, writeFile, mkdir } from 'node:fs/promises';
-import { extname, join, normalize } from 'node:path';
+import { extname, join, normalize, dirname } from 'node:path';
 import { createHash } from 'node:crypto';
 
 const root = process.cwd();
@@ -61,6 +61,23 @@ createServer(async (req, res) => {
     const p0 = decodeURIComponent(url.pathname);
 
     if (p0 === '/img') { await proxyImage(url.searchParams.get('u') || '', res); return; }
+
+    // 编辑器保存源码（仅开发用）：只允许写项目内的 .world
+    if (p0 === '/api/save') {
+      if (req.method !== 'POST') { res.writeHead(405).end('POST only'); return; }
+      const chunks = [];
+      for await (const c of req) chunks.push(c);
+      const body = JSON.parse(Buffer.concat(chunks).toString('utf8') || '{}');
+      const target = normalize(join(root, String(body.path || 'build/scene.world')));
+      if (!target.startsWith(root) || !target.endsWith('.world')) {
+        res.writeHead(400, { 'Content-Type': 'text/plain; charset=utf-8' }).end('只允许写项目内的 .world 文件');
+        return;
+      }
+      await mkdir(dirname(target), { recursive: true });
+      await writeFile(target, String(body.src ?? ''), 'utf8');
+      res.writeHead(200, { 'Content-Type': 'application/json' }).end(JSON.stringify({ ok: true }));
+      return;
+    }
 
     // 根路径必须真的跳到 /viewer/，否则浏览器 base URL 是 /，
     // 页面里的 ./main.js 会解析成 /main.js 而 404（模块加载失败是静默的）。
