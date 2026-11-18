@@ -197,10 +197,10 @@ gltf.scene.traverse((o) => {
   // 几何对齐：sprite 取 1.28 倍画框时，画框边缘恰好落在 UV 半径 1/1.28 ≈ 0.78 处，
   // 所以贴图的峰値必须放在 0.80（而不是 0.5）。放 0.5 的话峰值藏在画框背后被遮住，
   // 能看见的只有外围长尾巴 —— 那会看起来像背景渐变，不像光晕。
-  const factors = (q.get("halo") === "0") ? [] : (hero ? [[2.0, 0.55]] : [[1.9, 0.22]]);
+  const factors = (q.get("halo") === "0") ? [] : (hero ? [[2.0, 1.0]] : [[1.9, 0.5]]);
   normal.copy(PLANE_FRONT).applyQuaternion(mesh.getWorldQuaternion(tmpQ));
 
-  const tint = new THREE.Color().setHSL(info.hue / 360, 0.42, 0.74, THREE.SRGBColorSpace);
+  const tint = new THREE.Color().setHSL(info.hue / 360, 0.32, 0.88, THREE.SRGBColorSpace);
   const halos = [];
   for (const [f, opacity] of factors) {
     const sp = new THREE.Sprite(new THREE.SpriteMaterial({
