@@ -43,6 +43,20 @@ function loadItems(world, worldPath) {
     } catch { /* 下一个 */ }
   }
 
+  // v2 世界按 key 寻址，mock 数据必然对不上。
+  // 与其让人对着 120 条 E-PLACE-MISSING 发愣，不如直接说清楚缺什么。
+  if (world.regions.some(r => (r.places || []).length)) {
+    const want = worldPath.replace(/\.world$/, '.items.json');
+    throw new Error([
+      '这份源码是按真实收藏夹生成的，但旁边的快照不见了：',
+      `  ${want}`,
+      '',
+      '快照是第三方内容，不入库。两条路：',
+      `  1) 重新导入：node src/cli.mjs import <收藏夹链接> --merge --out ${worldPath}`,
+      '  2) 只是想看效果：node src/cli.mjs build examples/offline-demo.world',
+    ].join('\n'));
+  }
+
   const n = Number(arg('--items', world.items ?? 120));
   return { items: mockItems(n, `mock-v1:${n}`), from: `mock(${n})` };
 }

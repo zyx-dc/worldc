@@ -6,19 +6,27 @@
 
 ## 跑一下
 
+克隆下来就能跑，**不用联网、不用导入**：
+
 ```bash
-# 1. 把一个真实的 B站收藏夹变成一份 .world 源码
+# 1. 编译自带的离线示例（24 件合成数据，随仓库一起提交）
+node src/cli.mjs check examples/offline-demo.world
+node src/cli.mjs build examples/offline-demo.world --out build/scene.json
+node src/cli.mjs plan  examples/offline-demo.world --out build/plan.svg
+
+# 2. 走进去
+node serve.mjs      # 然后打开 http://localhost:5173/
+```
+
+换成你自己的收藏夹（这一步要联网）：
+
+```bash
 node src/cli.mjs import "https://space.bilibili.com/<mid>/favlist?fid=<fid>"
 #    也可以简写：node src/cli.mjs import "<mid> <fid>"
+node src/cli.mjs build examples/fav-<fid>.world --out build/scene.json
+```
 
-# 2. 先校验，再编译
-node src/cli.mjs check examples/bilibili-demo.world
-node src/cli.mjs build examples/bilibili-demo.world --out build/scene.json
-node src/cli.mjs plan  examples/bilibili-demo.world --out build/plan.svg
-
-# 3. 走进去
-node serve.mjs      # 然后打开 http://localhost:5173/
-
+```bash
 # 其它
 node test/determinism.mjs                                    # 22 条断言
 node test/validate.mjs                                       # 18 条 · 语义校验
@@ -30,7 +38,12 @@ node tools/push-api.mjs
 ```
 
 `import` 会写两个文件：`x.world`（**源码，请手改**）和 `x.items.json`（素材缓存）。
-`build` 会自动找同名的 `.items.json`，找不到才退回 mock 数据。
+`build` 会自动找同名的 `.items.json`；找不到时，按 key 寻址的世界会直接提示你去导入，
+而不是悄悄用假数据编译出一个空世界。
+
+> `examples/bilibili-demo.world` 是用真实收藏夹（120 件）编译出来的，
+> 旁边的快照是第三方内容、不入库。干净克隆里直接 build 它会被拦下 —— 
+> 只想看效果，用上面的离线示例。
 
 > 仓库里**不含 `*.items.json`**：那里面是第三方内容（标题、封面地址），体积也大。
 > 想复现真实数据，自己跑一次 `import` 就行 —— 这也顺便证明了它是可重放的。
@@ -181,6 +194,9 @@ tools/push-api.mjs       git 端点不通时，走 REST API 推送
 - 生成脚本：`tools/blender/space_scene.py`（环境与踩坑见同目录 README）
 - 页面：`viewer/space.html`
 - 预览：`docs/preview-space.png`、`docs/preview-space-hero.png`
+
+> 这一段依赖真实快照 `bilibili-demo.items.json`（不入库），
+> 且已提交的 `space.glb` 是按那 120 件生成的；换世界就要重跑 Blender。
 
 ```bash
 node src/cli.mjs build examples/bilibili-demo.world --out build/scene.json

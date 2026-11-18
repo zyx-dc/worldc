@@ -7,6 +7,8 @@ build/
 
 # 素材缓存：体积大且是第三方内容，不入库
 *.items.json
+# 例外：离线示例是合成的，专门用来让陌生人克隆下来就能跑
+!examples/offline-demo.items.json
 
 # 系统杂项
 .DS_Store

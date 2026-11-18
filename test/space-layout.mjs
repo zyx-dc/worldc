@@ -5,7 +5,6 @@ import { readFileSync, existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { parseWorld } from '../src/parse.mjs';
-import { mockItems } from '../src/adapters/mock.mjs';
 import { compile } from '../src/compile.mjs';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
@@ -36,24 +35,26 @@ const keyOf = name => String(name).replace(/^frame_/, '');
 const frames = glb.nodes.filter(n => /^frame_.+$/.test(n.name || ''));
 const glbIds = new Set(frames.map(n => keyOf(n.name)));
 
-const world = parseWorld(readFileSync(P('examples/bilibili-demo.world'), 'utf8'));
+// demo 的真实 items.json 含第三方内容，不入库。
+// 干净克隆时改用可入库的离线示例跑结构断言；
+// 与「已提交 glb」相关的几条只能 SKIP —— 那个 glb 是用真实收藏夹生成的。
+const hasRealItems = existsSync(P('examples/bilibili-demo.items.json'));
 
-// demo 的 items.json 含第三方内容，不入库。干净克隆时退回 mock 数据：
-// 结构类断言照常跑，只有「与已提交 glb 对齐」那几条会 SKIP。
-const ITEMS_PATH = P('examples/bilibili-demo.items.json');
-const hasRealItems = existsSync(ITEMS_PATH);
-const items = hasRealItems
-  ? JSON.parse(readFileSync(ITEMS_PATH, 'utf8'))
-  : mockItems(120, 'mock-v1');
+const worldPath = hasRealItems ? 'examples/bilibili-demo.world' : 'examples/offline-demo.world';
+const itemsPath = hasRealItems ? 'examples/bilibili-demo.items.json' : 'examples/offline-demo.items.json';
+
+const world = parseWorld(readFileSync(P(worldPath), 'utf8'));
+const items = JSON.parse(readFileSync(P(itemsPath), 'utf8'));
 
 if (!hasRealItems) {
-  console.log('  注意：未找到 demo 的 items.json，退回 mock 数据 ——');
+  console.log('  注意：未找到 demo 的 items.json，改用 examples/offline-demo（合成数据）——');
   console.log('        结构断言照跑，与已提交 glb 对齐的几条会 SKIP。\n');
 }
+
 const { ir } = compile(world, items);
 const irIds = new Set(ir.regions.flatMap(r => r.exhibits.map(e => e.item)));
 
-console.log(`  glb ${frames.length} 个画框 · IR ${irIds.size} 件展品\n`);
+console.log(`  glb ${frames.length} 个画框 · IR ${irIds.size} 件展品（${worldPath}）\n`);
 
 // 1. 一一对应
 if (hasRealItems) {
@@ -69,16 +70,24 @@ check('glb 不含材质（封面由网页端贴）', (glb.materials || []).lengt
   `${(glb.materials || []).length} 个材质`);
 
 // 3. 每个展区恰好一幅主画
-const heroes = frames.filter(n => n.extras?.hero);
-check('主画数量与展区数一致', heroes.length === ir.regions.length,
-  `${heroes.length} 幅 / ${ir.regions.length} 区`);
+if (hasRealItems) {
+  const heroes = frames.filter(n => n.extras?.hero);
+  check('主画数量与展区数一致', heroes.length === ir.regions.length,
+    `${heroes.length} 幅 / ${ir.regions.length} 区`);
+} else {
+  console.log('  SKIP  主画数量（glb 属于真实收藏夹那份世界）');
+}
 
 // 4. extras 里的 region 与 IR 一致
-const badRegion = !hasRealItems ? [] : frames.filter(n => {
-  const e = ir.regions.flatMap(r => r.exhibits.map(x => ({ ...x, rn: r.name }))).find(x => x.item === keyOf(n.name));
-  return e && n.extras?.region !== e.rn;
-});
-check('extras.region 与 IR 展区一致', badRegion.length === 0, badRegion.length ? `${badRegion.length} 处不符` : '全部一致');
+if (hasRealItems) {
+  const badRegion = frames.filter(n => {
+    const e = ir.regions.flatMap(r => r.exhibits.map(x => ({ ...x, rn: r.name }))).find(x => x.item === keyOf(n.name));
+    return e && n.extras?.region !== e.rn;
+  });
+  check('extras.region 与 IR 展区一致', badRegion.length === 0, badRegion.length ? `${badRegion.length} 处不符` : '全部一致');
+} else {
+  console.log('  SKIP  extras.region（同上）');
+}
 
 // 5. pin 写回：星海模式下 pos 就是世界坐标，编译后必须原样保留
 const pinX = 12.345, pinZ = -67.891, pinRot = 37;
