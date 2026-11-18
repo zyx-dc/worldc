@@ -21,6 +21,9 @@ node serve.mjs      # 然后打开 http://localhost:5173/
 # 其它
 node test/determinism.mjs                                    # 22 条断言
 node src/cli.mjs diff examples/my-favorites.world examples/my-favorites.tidied.world
+
+# github.com 的 git 端点不通、但 api 还能用时（本机代理常这样）
+node tools/push-api.mjs
 ```
 
 `import` 会写两个文件：`x.world`（**源码，请手改**）和 `x.items.json`（素材缓存）。
