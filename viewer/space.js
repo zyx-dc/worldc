@@ -323,22 +323,45 @@ const waterUniforms = {
   uTime: { value: 0 },
   uBlur: { value: 0.0011 },
   // 月光方向：从远处斜上方打过来，水面上会拉出一条竖直碎光带
-  uMoon: { value: new THREE.Vector3(0.22, 0.40, -0.89).normalize() },
-  uSpec: { value: 1.05 },
+  uMoon: { value: new THREE.Vector3(0.10, 0.52, -0.85).normalize() },
+  uSpec: { value: Number(q.get('spec') ?? 1.25) },
+  uDome: { value: Number(q.get('dome') ?? 0.6) },
+  // 顶点位移幅度。我们不是海：画框浮在 2.6m 以上，浪高只要打破地平线的"直"
+  uWaveH: { value: Number(q.get('waveh') ?? 0.18) },
 };
 
 const water = new THREE.Mesh(
-  new THREE.PlaneGeometry(6000, 6000),
+  // 700m 见方、200×200 段：水面 330m 外已经全透明，铺 6000m 没意义，
+  // 而且网格太稀的话顶点位移会在地平线露出锯齿
+  new THREE.PlaneGeometry(700, 700, 200, 200),
   new THREE.ShaderMaterial({
     uniforms: waterUniforms,
     transparent: true,
     depthWrite: false,
     vertexShader: `
       uniform mat4 uTexMatrix;
+      uniform float uTime;
+      uniform float uWaveH;
       varying vec4 vProj;
       varying vec3 vWorld;
+
+      // 与片元着色器同一组波。位移和法线必须同源，
+      // 否则高光会"浮"在水面上，看着像另一层东西在动。
+      float waveHeight(vec2 q, float t) {
+        float h = 0.0;
+        h += sin(dot(q, vec2(0.62, 0.38)) * 0.30 + t * 0.55) * 0.50;
+        h += sin(dot(q, vec2(-0.45, 0.80)) * 0.55 - t * 0.75) * 0.32;
+        h += sin(dot(q, vec2(0.90, -0.42)) * 1.35 + t * 1.45) * 0.12;
+        return h;
+      }
+
       void main() {
         vec4 wp = modelMatrix * vec4(position, 1.0);
+
+        // 远处压低位移：地平线附近的网格本来就稀，位移大了会抖成锯齿
+        float atten = 1.0 / (1.0 + 0.012 * length(wp.xz - cameraPosition.xz));
+        wp.y += waveHeight(wp.xz, uTime) * uWaveH * atten;
+
         vWorld = wp.xyz;
         vProj = uTexMatrix * vec4(position, 1.0);
         gl_Position = projectionMatrix * viewMatrix * wp;
@@ -352,6 +375,7 @@ const water = new THREE.Mesh(
       uniform float uBlur;
       uniform vec3 uMoon;
       uniform float uSpec;
+      uniform float uDome;
       varying vec4 vProj;
       varying vec3 vWorld;
 
@@ -377,6 +401,14 @@ const water = new THREE.Mesh(
         grad += vec2(0.90, -0.42) * 1.35 * cos(p3) * 0.12;
 
         return h;
+      }
+
+      // 2D 哈希：给每个格子一个稳定的伪随机值（全项目禁用 Math.random，
+      // 着色器里也一样 —— 闪光必须能重放）
+      float hash21(vec2 p) {
+        p = fract(p * vec2(123.34, 456.21));
+        p += dot(p, p + 45.32);
+        return fract(p.x * p.y);
       }
 
       void main() {
@@ -411,7 +443,7 @@ const water = new THREE.Mesh(
         // 天穹漫反射：把整个天空当成一个柔光源。
         // 没有这一项的话，俯视时水面就是一片纯黑 —— 波纹的起伏完全看不出来。
         vec3 Hn = normalize(vec3(0.0, 1.0, 0.0) + V);
-        float dome = pow(max(dot(normalize(vec3(-grad.x * 0.05 * atten, 1.0, -grad.y * 0.05 * atten)), Hn), 0.0), 3.0);
+        float dome = pow(max(dot(normalize(vec3(-grad.x * 0.05 * atten, 1.0, -grad.y * 0.05 * atten)), Hn), 0.0), 3.0) * uDome;
         col += vec3(0.16, 0.26, 0.42) * dome * (0.25 + 0.75 * fres);
 
         // 波峰微亮：让暗处也能看出水的起伏，而不是一块黑板
@@ -426,11 +458,32 @@ const water = new THREE.Mesh(
         vec3 H = normalize(normalize(uMoon) + V);
         float ndh = max(dot(N, H), 0.0);
 
-        // 用波高调制，而不是再叠一条正弦：正弦在屏幕上是规则条纹，
-        // 一混叠就变成"贴了花纹的地板"
-        float sparkle = 0.55 + 0.45 * clamp(h * 0.9 + 0.5, 0.0, 1.0);
-        float spec = pow(ndh, 46.0) * sparkle * 0.60 + pow(ndh, 7.0) * 0.085;
-        col += vec3(0.85, 0.92, 1.0) * spec * uSpec * (0.30 + 0.70 * fres);
+        // 用「波峰包络」而不是再叠一条正弦来打碎高光：
+        // 正弦在屏幕上是规则条纹，一混叠就成了贴花纹的地板；
+        // 波峰是平滑但形状不规则的团，碎光才像随机闪。
+        float hn = clamp(h * 0.5 + 0.5, 0.0, 1.0);
+        float crest = smoothstep(0.52, 0.96, hn);
+        float spec = pow(ndh, 60.0) * (0.30 + 1.15 * crest) + pow(ndh, 6.0) * 0.05;
+        col += vec3(0.82, 0.90, 1.0) * spec * uSpec * (0.28 + 0.72 * fres);
+
+        // 逆光时浪峰透出来的一点青绿 —— 材料里"透光"那一条，
+        // 夜里的版本就是很淡的一层，只在浪尖亮起来
+        float back = pow(max(dot(-V, normalize(uMoon)), 0.0), 3.0);
+        col += vec3(0.06, 0.20, 0.22) * crest * back * 0.55;
+
+        // ── 水面碎光 ────────────────────────────────────
+        // 夜里的水最容易被认出来的特征不是波纹，是散落的细小反光。
+        // 用格子哈希挑出极少数格子点亮，并让它们随距离淡出 ——
+        // 不淡出的话远处每像素跨好几百个格子，会抖成噪点。
+        float near = 1.0 - smoothstep(12.0, 90.0, d);
+        vec2 g = q * 1.9;
+        vec2 id = floor(g);
+        vec2 f = fract(g) - 0.5;
+        float cell = hash21(id);
+        float pick = pow(cell, 40.0);                       // 只有极少数格子发光
+        float dotMask = smoothstep(0.30, 0.02, length(f));  // 发光的是格子中心的小点，不是整格
+        float blink = 0.55 + 0.45 * sin(uTime * 2.3 + cell * 47.0);
+        col += vec3(0.72, 0.86, 1.0) * pick * dotMask * blink * near * 1.1;
 
         // 远端渐隐为透明，让天空透出来 —— 比硬染色去接缝可靠得多
         col = mix(col, uFog, smoothstep(40.0, 220.0, d) * 0.55);
