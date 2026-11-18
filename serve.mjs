@@ -5,6 +5,7 @@ import { createServer } from 'node:http';
 import { readFile, writeFile, mkdir } from 'node:fs/promises';
 import { extname, join, normalize, dirname, resolve, relative, isAbsolute, sep } from 'node:path';
 import { createHash } from 'node:crypto';
+import { fetchImage, hostAllowed, createLimiter, ProxyError, DEFAULT_LIMITS as IMG_LIMITS } from './src/imgproxy.mjs';
 
 const root = resolve(process.cwd());
 
@@ -35,11 +36,23 @@ const MIME = {
   '.gif': 'image/gif',
 };
 
-// 只代理 B站图片 CDN，避免变成开放代理
-const ALLOWED_IMG = /^https:\/\/[a-z0-9-]+\.hdslb\.com\//i;
+// 只代理 B站图片 CDN，避免变成开放代理。
+// 具体的白名单、逐跳重定向校验、体积/超时上限都在 src/imgproxy.mjs 里，
+// 这里只留一个并发闸门 —— 同时抓 120 张封面时不要把连接池打满。
+const imgLimiter = createLimiter(IMG_LIMITS.concurrency);
 
 async function proxyImage(u, res) {
-  if (!ALLOWED_IMG.test(u)) { res.writeHead(403).end('host not allowed'); return; }
+  let parsed;
+  try {
+    parsed = new URL(u);
+  } catch {
+    res.writeHead(400, { 'Content-Type': 'text/plain; charset=utf-8' }).end('不是合法的图片地址');
+    return;
+  }
+  if (!hostAllowed(parsed.hostname)) {
+    res.writeHead(403, { 'Content-Type': 'text/plain; charset=utf-8' }).end(`不允许的图源：${parsed.hostname}`);
+    return;
+  }
 
   const m = u.match(/\.(jpe?g|png|webp|gif)(?:\?|$)/i);
   const ext = m ? m[1].toLowerCase().replace('jpeg', 'jpg') : 'jpg';
@@ -50,11 +63,19 @@ async function proxyImage(u, res) {
   try {
     buf = await readFile(file);
   } catch {
-    const r = await fetch(u, {
-      headers: { 'User-Agent': 'Mozilla/5.0', Referer: 'https://www.bilibili.com/' },
-    });
-    if (!r.ok) { res.writeHead(502).end('upstream ' + r.status); return; }
-    buf = Buffer.from(await r.arrayBuffer());
+    let held = false;
+    try {
+      await imgLimiter.acquire();
+      held = true;
+      buf = (await fetchImage(u)).buf;
+    } catch (e) {
+      const status = e instanceof ProxyError ? e.status : 502;
+      res.writeHead(status, { 'Content-Type': 'text/plain; charset=utf-8' }).end(`图片代理失败：${e.message}`);
+      return;
+    } finally {
+      if (held) imgLimiter.release();
+    }
+
     await mkdir(COVER_DIR, { recursive: true });
     await writeFile(file, buf);   // 落盘缓存：断网也能再打开
   }

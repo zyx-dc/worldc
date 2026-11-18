@@ -28,7 +28,7 @@ function chunk(list, n) {
 }
 
 /** 把「区域 + 每件一个格子」渲染成源码 */
-function renderWorld({ title, source, seed, regions, totalItems }) {
+function renderWorld({ title, source, seed, regions, totalItems, note }) {
   const head = [
     '# 由 worldc import 生成 —— 这是一份源码，不是场景。',
     '# 想改世界就改这个文件，然后重新 build。改一行不会动到别的展品。',
@@ -37,6 +37,7 @@ function renderWorld({ title, source, seed, regions, totalItems }) {
     '# 重新用 import --merge 追加，旧展品就会留在原地。',
     `# 源：${title}（${source}）`,
     `# ${totalItems} 件`,
+    ...(note ? [`# 注意：${note} —— 这不是完整收藏夹，重新导入前别拿它当全量`] : []),
     '',
     `world ${esc(title)} {`,
     `  seed 0x${seed.toString(16)}`,
@@ -70,7 +71,7 @@ function renderWorld({ title, source, seed, regions, totalItems }) {
  * @returns {Promise<{world:string, regions:Array, seed:number}>}
  */
 export async function buildWorldFromItems(items, opt) {
-  const { title, source, seedKey, perRegion = 36, strategy = 'keyword' } = opt;
+  const { title, source, seedKey, perRegion = 36, strategy = 'keyword', note = '' } = opt;
   if (!items.length) throw new Error('收藏夹是空的，没什么可编译的');
 
   // 分块：每块大约一屏能走完
@@ -100,7 +101,7 @@ export async function buildWorldFromItems(items, opt) {
   // 与「同一份收藏夹永远同一片星海」直接冲突。
   const seed = hash32(`${seedKey}|world-v1`);
 
-  return { world: renderWorld({ title, source, seed, regions, totalItems: items.length }), regions, seed };
+  return { world: renderWorld({ title, source, seed, regions, totalItems: items.length, note }), regions, seed };
 }
 
 /**

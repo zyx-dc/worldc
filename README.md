@@ -20,6 +20,7 @@ node serve.mjs      # 然后打开 http://localhost:5173/
 
 # 其它
 node test/determinism.mjs                                    # 22 条断言
+node test/robustness.mjs                                     # 19 条 · 网络容错 + 图片代理防护（离线）
 node src/cli.mjs diff examples/my-favorites.world examples/my-favorites.tidied.world
 
 # github.com 的 git 端点不通、但 api 还能用时（本机代理常这样）
@@ -105,6 +106,27 @@ diff    moved 0 · rotated 0 · region 0 · gone 0 · added 3
 > `layout` 缺省是 1：早期文件没有 place 行，仍按「序号落格」编译，结果一字不改。
 > 迁到 v2 只需要跑一次 `--merge` —— 它认得 v1 的 `take` 区间，能一比一还原每一格。
 > 本仓库的 demo 就是这么迁的，120 件位移 0.000 m、转角 0.0°。
+
+## 网络这层按「会坏」来写
+
+导入收藏夹和贴封面是唯二会碰外部网络的地方，两处都当成会失败来处理。
+
+**导入**（`src/adapters/bilibili.mjs`）
+
+- 每次请求 10s 超时，不会挂死
+- 5xx / 429 / 超时 / 风控码（-509 这类）退避重试：400ms → 800ms，最多 3 次
+- 4xx 和明确的业务错误（-404 之类）**不重试**，直接报出来 —— 重试只会浪费时间
+- 撞 `--max` 或翻页上限时标 `partial`，源码头部会写一行「这不是完整收藏夹」
+- **残缺快照禁止合并**：否则没取到的条目会被当成「取消收藏」删掉
+
+**图片代理**（`src/imgproxy.mjs`）
+
+- 只放 `hdslb.com` 及其子域
+- 重定向**手动**跟随，每一跳重新验域名 —— `fetch` 默认自动跟随，
+  上游只要 302 到内网地址，白名单就形同虚设
+- 8 MB / 8 s / 6 并发三个上限，只接受 `image/*`
+
+---
 
 ## 目录
 

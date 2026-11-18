@@ -181,6 +181,8 @@ async function cmdImport() {
   }
 
   let items;
+  let partial = false;
+  let partialNote = '';
   let title = arg('--title', null);
   let source = arg('--source', null);
   let fid = null;
@@ -209,6 +211,8 @@ async function cmdImport() {
     const max = Number(arg('--max', 240));
     const res = await fetchFolder(fid, { mid: owner, max });
     items = res.items;
+    partial = res.partial;
+    partialNote = res.note;
     title = title || res.info.title;
     source = source || `bilibili/fav/${fid}${owner ? `?mid=${owner}` : ''}`;
     if (!items.length) throw new Error('这个收藏夹没有可读内容（可能是私密收藏夹）');
@@ -221,6 +225,14 @@ async function cmdImport() {
   // ── 合并：读旧源码 + 旧快照，保留每一个已有格位 ──
   let result;
   let stats = null;
+
+  if (doMerge && partial) {
+    // 残缺快照绝不能拿去合并：没取到的条目会被当成「取消收藏」删掉
+    throw new Error(
+      `这次只取到部分收藏夹（${partialNote}），不能拿来合并 —— ` +
+      '没取到的会被当成「取消收藏」从世界里删掉。把 --max 调大（或去掉）再试。',
+    );
+  }
 
   if (doMerge && existsSync(out)) {
     const existing = parseWorld(readFileSync(out, 'utf8'));
@@ -240,6 +252,7 @@ async function cmdImport() {
       title,
       source,
       seedKey: `${fid ?? source}|${title}`,
+      note: partialNote,
     });
   }
 
@@ -266,6 +279,7 @@ async function cmdImport() {
   for (const r of result.regions) {
     console.log(`  ${' '.repeat(8)}▸ ${pad(r.name, 14)}${pad(`${r.entries.length} 件`, 10)}${r.rows}×${r.cols}`);
   }
+  if (partial) console.log(`  ${pad('partial', 8)}${partialNote}`);
   console.log(`  ${pad('source', 8)}${out}  ·  ${result.world.split('\n').length} 行  ·  ${(Buffer.byteLength(result.world) / 1024).toFixed(1)} KB`);
   console.log(`  ${pad('cache', 8)}${cachePath}`);
   console.log('');
