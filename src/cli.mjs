@@ -9,6 +9,7 @@ import { readFileSync, writeFileSync, mkdirSync, existsSync } from 'node:fs';
 import { dirname, basename } from 'node:path';
 import { parseWorld } from './parse.mjs';
 import { compile, canonical, diff } from './compile.mjs';
+import { validate } from './validate.mjs';
 import { renderPlan } from './render/plan.mjs';
 import { mockItems } from './adapters/mock.mjs';
 import { parseFavTarget, fetchFolder, listFolders } from './adapters/bilibili.mjs';
@@ -62,6 +63,19 @@ function cmdBuild() {
   const t0 = process.hrtime.bigint();
   const { world, src } = loadWorld(path);
   const { items, from } = loadItems(world, path);
+
+  // 先校验再编译：error 直接拦下，warning 照编但要说出来
+  const v = validate(world, items);
+  if (!v.ok) {
+    console.log('');
+    console.log('  worldc · 校验没通过');
+    console.log('  ' + RULE);
+    for (const e of v.errors) console.log(`  ✗ ${pad(e.code, 17)}${e.msg}`);
+    for (const w of v.warnings) console.log(`  ! ${pad(w.code, 17)}${w.msg}`);
+    console.log('');
+    throw new Error(`有 ${v.errors.length} 处错误，先修掉再编译`);
+  }
+
   const { ir, hash, stats } = compile(world, items);
   const ms = Number(process.hrtime.bigint() - t0) / 1e6;
 
@@ -83,6 +97,8 @@ function cmdBuild() {
   console.log(`  ${pad('ir', 8)}空间图 ${stats.placed} 节点 · ${(stats.bytes / 1024).toFixed(1)} KB`);
   console.log(`  ${pad('hash', 8)}sha256 ${hash.slice(0, 16)}…${hash.slice(-6)}`);
   console.log(`  ${pad('time', 8)}${ms.toFixed(1)} ms`);
+  console.log(`  ${pad('check', 8)}${v.warnings.length ? `${v.warnings.length} 条提醒` : '通过'}`);
+  for (const w of v.warnings) console.log(`  ${' '.repeat(8)}! ${pad(w.code, 17)}${w.msg}`);
   console.log('');
 
   const out = arg('--out', null);
@@ -101,6 +117,30 @@ function cmdBuild() {
   }
 
   return { ir, hash, stats };
+}
+
+function cmdCheck() {
+  const path = process.argv[3];
+  if (!path) throw new Error('用法：worldc check <file.world>');
+
+  const { world } = loadWorld(path);
+  const { items, from } = loadItems(world, path);
+  const v = validate(world, items);
+
+  console.log('');
+  console.log('  worldc · 校验');
+  console.log('  ' + RULE);
+  console.log(`  ${pad('world', 8)}${world.name}`);
+  console.log(`  ${pad('layout', 8)}v${world.layoutVersion}   ·   seed 0x${world.seed.toString(16)}`);
+  console.log(`  ${pad('items', 8)}${items.length} 件  ←  ${from}`);
+  console.log(`  ${pad('regions', 8)}${world.regions.length}   ·   pin ${world.pins.length} 条`);
+  console.log(`  ${pad('errors', 9)}${v.errors.length}`);
+  console.log(`  ${pad('warnings', 9)}${v.warnings.length}`);
+  for (const e of v.errors) console.log(`  ${' '.repeat(8)}✗ ${pad(e.code, 17)}${e.msg}`);
+  for (const w of v.warnings) console.log(`  ${' '.repeat(8)}! ${pad(w.code, 17)}${w.msg}`);
+  console.log('');
+
+  if (!v.ok) process.exitCode = 1;
 }
 
 function cmdDiff() {
@@ -292,12 +332,14 @@ const cmd = process.argv[2];try {
   if (cmd === 'build') cmdBuild();
   else if (cmd === 'diff') cmdDiff();
   else if (cmd === 'plan') cmdPlan();
+  else if (cmd === 'check') cmdCheck();
   else if (cmd === 'import') await cmdImport();
   else {
     console.log('worldc · 世界编译器 v0.1');
     console.log('  import <收藏夹链接 | "mid fid"> [--max N] [--out x.world] [--merge]');
     console.log('  build  <file.world> [--items-from x.items.json] [--out scene.json]');
     console.log('  plan   <file.world> [--out build/plan.svg]');
+    console.log('  check  <file.world>');
     console.log('  diff   <a.world> <b.world>');
   }
 } catch (e) {

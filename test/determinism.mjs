@@ -21,6 +21,12 @@ function check(label, ok, detail = '') {
 
 const src = readFileSync(join(root, 'examples/my-favorites.world'), 'utf8');
 const world = parseWorld(src);
+
+// 这份示例里的 pin 指向真实 bvid，而这里喂的是 mock 素材 ——
+// 悬空 pin 现在会报错（以前是静默丢弃），所以先清掉。
+// pin 的解析与报错由 test/validate.mjs 专门覆盖。
+world.pins = [];
+
 const items = mockItems(world.items, 'mock-v1:120');
 
 console.log('\n  worldc · 架构承诺验证');

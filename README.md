@@ -11,7 +11,8 @@
 node src/cli.mjs import "https://space.bilibili.com/<mid>/favlist?fid=<fid>"
 #    也可以简写：node src/cli.mjs import "<mid> <fid>"
 
-# 2. 编译它
+# 2. 先校验，再编译
+node src/cli.mjs check examples/bilibili-demo.world
 node src/cli.mjs build examples/bilibili-demo.world --out build/scene.json
 node src/cli.mjs plan  examples/bilibili-demo.world --out build/plan.svg
 
@@ -20,6 +21,7 @@ node serve.mjs      # 然后打开 http://localhost:5173/
 
 # 其它
 node test/determinism.mjs                                    # 22 条断言
+node test/validate.mjs                                       # 18 条 · 语义校验
 node test/robustness.mjs                                     # 19 条 · 网络容错 + 图片代理防护（离线）
 node src/cli.mjs diff examples/my-favorites.world examples/my-favorites.tidied.world
 
@@ -139,6 +141,7 @@ spec/world.dsl.md        .world 源文件规范
 src/parse.mjs            词法 + 递归下降解析
 src/layout.mjs           推导层（纯函数）
 src/compile.mjs          编译器：源码 → IR · 内容寻址 · 空间 diff
+src/validate.mjs         编译前校验：语义错、容量、悬空引用（error / warning 两级）
 src/hash.mjs             纯 JS sha256（让编译器在浏览器里也能跑）
 src/rng.mjs              确定性随机（全项目禁止 Math.random）
 src/naming.mjs           命名层（唯一允许"创造性"的一步，可换 LLM）
@@ -148,9 +151,13 @@ src/render/plan.mjs      2D 后端：IR → 展陈平面图
 src/adapters/bilibili.mjs  L1 摄取：B站公开收藏夹
 src/adapters/mock.mjs     离线用的假数据
 viewer/                  3D 后端：three.js 第一人称漫游
-serve.mjs                静态服务器 + 封面图代理
+src/imgproxy.mjs         封面代理：域名白名单 + 逐跳校验 + 体积/耗时/并发上限
+serve.mjs                静态服务器
 examples/                几个世界，用来演示 diff 与真实导入
 test/determinism.mjs     架构承诺的可执行验证
+test/validate.mjs        语义校验的回归
+test/robustness.mjs      网络容错与代理防护的回归（全离线）
+tools/push-api.mjs       git 端点不通时，走 REST API 推送
 ```
 
 ## 实测

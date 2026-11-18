@@ -92,13 +92,23 @@ export function compile(world, items) {
   // 覆盖层：手挪过的展品，只覆盖坐标，不重新布局
   const pinnedIds = new Set();
   for (const pin of world.pins) {
+    let hit = false;
     for (const region of regions) {
       const ex = region.exhibits.find(e => e.item === pin.item);
       if (!ex) continue;
+      hit = true;
       ex.pos = pin.pos;
       ex.rot = pin.rot;
       ex.pinned = true;
       pinnedIds.add(pin.item);
+    }
+    // 以前这里是 continue：pin 写错一个字符就被静默丢掉，
+    // 编辑器里拖动「没反应」，而且一点线索都没有。
+    if (!hit) {
+      throw new Error(
+        `pin 引用了不存在的展品 "${pin.item}" —— ` +
+        `跑 node src/cli.mjs check 看看它能匹配到哪个。`,
+      );
     }
   }
 

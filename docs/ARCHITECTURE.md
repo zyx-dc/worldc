@@ -52,6 +52,8 @@ L3  理解        本地嵌入 → 聚类 → 命名
                      ↓  ★ LLM 的职权被限制在"命名"这一个自由度上
 L4  世界源      .world  =  规则 + seed + 稀疏覆盖        ← 唯一真相
                      ↓
+L5  校验        语义检查：悬空引用 / 格子冲突 / 未知算法版本 / 容量
+                     ↓  error 拦下，warning 放行但要说出来
 L5  编译        纯函数 → IR（场景图）· region 级缓存 · 内容寻址
                      ↓
 L6  渲染        IR ─┬─▶ 3D 漫游（three.js）
@@ -66,7 +68,7 @@ L6  渲染        IR ─┬─▶ 3D 漫游（three.js）
 | L2 | 适配器输出即为归一结构 |
 | L3 | `src/naming.mjs`（命名）· 嵌入聚类待接 |
 | L4 | `examples/*.world` · `spec/world.dsl.md` · `src/importer.mjs` |
-| L5 | `src/parse.mjs` → `src/layout.mjs` → `src/compile.mjs` |
+| L5 | `src/parse.mjs` → `src/validate.mjs` → `src/layout.mjs` → `src/compile.mjs` |
 | L6 | `viewer/`（3D）· `src/render/plan.mjs`（2D） |
 
 > **L3 的现状要说清楚**：嵌入聚类还没接，目前是「按时间分块 + 关键词命名」。
