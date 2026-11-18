@@ -517,7 +517,11 @@ addEventListener('keydown', (e) => {
   keys[e.code] = true;
   if (e.code === 'Space') e.preventDefault();   // 别让空格滚页面
   if (e.code === 'Backquote') location.href = EDIT ? './?gate=0' : './?edit=1';
-  if (e.code === 'Escape' && EDIT) location.href = './?gate=0';
+  if (e.code === 'KeyF' && nearPanel && !playing) openPlayer(nearPanel);
+  if (e.code === 'Escape') {
+    if (playing) { closePlayer(); return; }
+    if (EDIT) location.href = './?gate=0';
+  }
 });
 addEventListener('keyup', (e) => { keys[e.code] = false; });
 
@@ -612,6 +616,102 @@ if (EDIT) {
   $('save')?.addEventListener('click', saveSource);
 }
 
+// ── 靠近展品：显示信息；按 F 让这块画框真的播起来 ──────────
+const NEAR = 16;        // 进入这个距离就显示信息卡
+const PLAY_FAR = 34;    // 走远了自动停
+
+const bvidById = new Map();
+try {
+  const raw = await fetch('../build/scene.items.json').then(r => (r.ok ? r.json() : []));
+  for (const it of raw) if (it.bvid) bvidById.set(it.id, it.bvid);
+} catch { /* 没有 items.json 就只是不能播 */ }
+
+const cardEl = $('card');
+const cardTitle = $('cardTitle');
+const cardMeta = $('cardMeta');
+const cardHint = $('cardHint');
+const playerEl = $('player');
+const pvEl = $('pv');
+
+let nearPanel = null;
+let playing = null;
+const _corner = new THREE.Vector3();
+
+/** 把画框的四个角投到屏幕上，得到它占的屏幕矩形 */
+function screenRect(mesh) {
+  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+  for (const [x, z] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) {
+    _corner.set(x, 0, z).applyMatrix4(mesh.matrixWorld).project(camera);
+    const sx = (_corner.x * 0.5 + 0.5) * innerWidth;
+    const sy = (-_corner.y * 0.5 + 0.5) * innerHeight;
+    if (sx < minX) minX = sx;
+    if (sx > maxX) maxX = sx;
+    if (sy < minY) minY = sy;
+    if (sy > maxY) maxY = sy;
+  }
+  return { x: minX, y: minY, w: maxX - minX, h: maxY - minY };
+}
+
+function openPlayer(p) {
+  const bvid = bvidById.get(p.id);
+  if (!bvid) { cardHint.textContent = '这条没有视频号，播不了'; return; }
+  playing = p;
+  pvEl.src = `https://player.bilibili.com/player.html?bvid=${bvid}&autoplay=1&danmaku=0&high_quality=1`;
+  playerEl.classList.add('on');
+}
+
+function closePlayer() {
+  playing = null;
+  playerEl.classList.remove('on');
+  pvEl.src = 'about:blank';
+}
+
+$('pclose')?.addEventListener('click', closePlayer);
+
+function updateNear() {
+  let best = null, bestD = Infinity;
+  for (const p of panels) {
+    const d = p.mesh.position.distanceTo(camera.position);
+    if (d < bestD) { bestD = d; best = p; }
+  }
+
+  const next = best && bestD < NEAR ? best : null;
+  if (next !== nearPanel) {
+    nearPanel = next;
+    if (nearPanel) {
+      const info = metaById.get(nearPanel.id) || {};
+      cardTitle.textContent = info.title || `#${nearPanel.id}`;
+      cardMeta.textContent = `${info.region || nearPanel.region || ''} · ${info.year ?? ''}${info.owner ? ' · UP ' + info.owner : ''}`;
+      cardHint.innerHTML = bvidById.has(nearPanel.id)
+        ? '按 <b>F</b> 在画框上播放'
+        : '这条没有视频号';
+      cardEl.classList.add('on');
+    } else {
+      cardEl.classList.remove('on');
+    }
+  }
+  // 播放时把信息卡收掉，别压在播放器下面
+  if (playing) cardEl.classList.remove('on');
+
+  if (playing) {
+    if (bestD > PLAY_FAR) { closePlayer(); return; }
+    const r = screenRect(playing.mesh);
+    // 画框贴得很近时，投影矩形会比屏幕还大；夹进视口并保持与画框同心
+    const maxW = innerWidth * 0.86;
+    const maxH = innerHeight * 0.86;
+    const w = Math.min(Math.max(160, r.w), maxW);
+    const h = Math.min(Math.max(90, r.h), maxH);
+    let x = r.x + (r.w - w) / 2;
+    let y = r.y + (r.h - h) / 2;
+    x = Math.max(10, Math.min(innerWidth - w - 10, x));
+    y = Math.max(10, Math.min(innerHeight - h - 10, y));
+    playerEl.style.left = x + 'px';
+    playerEl.style.top = y + 'px';
+    playerEl.style.width = w + 'px';
+    playerEl.style.height = h + 'px';
+  }
+}
+
 // ── 主循环 ─────────────────────────────────────────────────
 const clock = new THREE.Clock();
 const fwd = new THREE.Vector3();
@@ -649,6 +749,7 @@ function tick() {
   renderReflection();
 
   if ((hudFrame++ & 7) === 0) updateHud();
+  updateNear();
   renderer.render(scene, camera);
   requestAnimationFrame(tick);
 }

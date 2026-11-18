@@ -70,11 +70,12 @@ FRAME_W, FRAME_H = 1.6, 0.9
 # 散点参数（调视觉只改这里）
 # 原来 x±30、y+2..+34 是 60×32 一片，四簇完全糊成一条带；
 # 收紧到 24×16 之后，簇与簇之间才留得出空水。
-SCATTER_X = 12.0                 # 簇内横向半径
-SCATTER_Y_NEAR, SCATTER_Y_FAR = 2.0, 18.0   # 簇内纵深（锚点之后）
-MIN_DIST = 2.2                   # 拒绝采样的最小水平间距
-SIZE_MIN, SIZE_MAX = 0.45, 1.20  # 小画相对基准 1.6×0.9 的缩放
-HEIGHT_MIN, HEIGHT_MAX = 3.4, 12.5
+SCATTER_X = 14.0                 # 簇内横向半径
+SCATTER_Y_NEAR, SCATTER_Y_FAR = 1.5, 26.0   # 簇内纵深（锚点之后）
+MIN_DIST = 2.0                   # 拒绝采样的最小水平间距
+SIZE_MIN, SIZE_MAX = 0.34, 2.30  # 小画缩放区间（阈值：再小看不清，再大会压过主画）
+SIZE_BIAS = 2.4                  # >1 让小尺寸占多数，偶尔出现一块大的 —— 参差感来自这里
+HEIGHT_MIN, HEIGHT_MAX = 2.6, 14.5
 
 
 # ── 场景清空 ──────────────────────────────────────────────
@@ -145,7 +146,8 @@ def layout():
             placed.append((x, y))
 
             h = rnd.uniform(HEIGHT_MIN, HEIGHT_MAX)
-            s = rnd.uniform(SIZE_MIN, SIZE_MAX)
+            # 幂律分布：多数偏小、少数明显偏大，比均匀分布更参差
+            s = SIZE_MIN + (SIZE_MAX - SIZE_MIN) * (rnd.random() ** SIZE_BIAS)
             out.append({
                 "item": e["item"], "region": region["name"], "hue": region["hue"],
                 "x": x, "y": y, "z": h, "rot": yaw_to_cam(x, y) + rnd.uniform(-0.09, 0.09),
