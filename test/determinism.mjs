@@ -43,19 +43,19 @@ check('D1 换种子让所有展品重新布局', dSeed.moved.length > 100, `${dS
 
 // 承诺 3：覆盖层 —— 手挪一件，只动那一件
 const worldC = structuredClone(world);
-worldC.pins = [...world.pins, { item: 77, pos: [9, 0, -9], rot: 45 }];
+worldC.pins = [...world.pins, { item: 'mock_77', pos: [9, 0, -9], rot: 45 }];
 const c1 = compile(worldC, items);
 const dPin = diff(a1.ir, c1.ir);
 check('D2 覆盖层：pin 只影响 1 件', dPin.moved.length === 1, `moved=${dPin.moved.length}`);
 
-const pinned = c1.ir.regions.flatMap(r => r.exhibits).find(e => e.item === 77);
+const pinned = c1.ir.regions.flatMap(r => r.exhibits).find(e => e.item === 'mock_77');
 check('D2 覆盖层：pin 的坐标被精确写入', JSON.stringify(pinned.pos) === '[9,0,-9]' && pinned.rot === 45 && pinned.pinned === true);
 
 // 承诺 4：世界是程序不是资产 —— 场景图极小
 check('D3 零资产：场景图 < 64 KB', a1.stats.bytes < 64 * 1024, `${(a1.stats.bytes / 1024).toFixed(1)} KB / ${a1.stats.placed} 节点`);
 
 // 承诺 5：增量可解释 —— diff 能指出谁动了
-check('D4 空间 diff：能定位到具体展品和位移', dPin.moved[0]?.id === 77 && dPin.moved[0].distance > 0,
+check('D4 空间 diff：能定位到具体展品和位移', dPin.moved[0]?.id === 'mock_77' && dPin.moved[0].distance > 0,
   dPin.moved[0] ? `#${dPin.moved[0].id} 位移 ${dPin.moved[0].distance}` : '无');
 
 // ── 审计整改回归（对应报告 A-02 / A-05） ──────────────────────
@@ -72,12 +72,23 @@ check('D4 空间 diff：能定位到具体展品和位移', dPin.moved[0]?.id ==
 // A-05：只转不移也要被 diff 记录到，否则「转了一下」等于没发生
 {
   const wA = structuredClone(world);
-  wA.pins = [...world.pins, { item: 60, pos: [5, 0, -5], rot: 10 }];
+  wA.pins = [...world.pins, { item: 'mock_60', pos: [5, 0, -5], rot: 10 }];
   const wB = structuredClone(world);
-  wB.pins = [...world.pins, { item: 60, pos: [5, 0, -5], rot: 55 }];
+  wB.pins = [...world.pins, { item: 'mock_60', pos: [5, 0, -5], rot: 55 }];
   const d = diff(compile(wA, items).ir, compile(wB, items).ir);
   check('A-05 只改旋转也能被 diff 识别', d.rotated.length === 1 && d.moved.length === 0,
     `rotated=${d.rotated.length} moved=${d.moved.length} Δ${d.rotated[0]?.delta ?? '-'}°`);
+}
+
+// A-03：素材身份必须来自内容本身，不能来自它在数组里的位置。
+// 这条现在会失败 —— 失败是预期的，它描述的是「改完之后必须成立」的契约。
+{
+  const items = mockItems(12);
+  const shifted = [{ ...items[0], title: '插到最前面的一条新收藏' }, ...items];
+  const keysOld = items.slice(1).map(i => i.key);
+  const keysNew = new Set(shifted.slice(1).map(i => i.key));
+  const same = keysOld.every(k => k && keysNew.has(k));
+  check('A-03 素材身份不随数组位置漂移', same, `旧 ${keysOld.length} 条 / 命中 ${keysNew.size} 个`);
 }
 
 console.log('');

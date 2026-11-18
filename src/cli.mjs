@@ -46,6 +46,11 @@ function loadItems(world, worldPath) {
   return { items: mockItems(n, `mock-v1:${n}`), from: `mock(${n})` };
 }
 
+function shortKey(k) {
+  const s = String(k);
+  return s.length > 15 ? s.slice(0, 15) : s;
+}
+
 function pad(s, n) {
   return String(s).padEnd(n, ' ');
 }
@@ -122,12 +127,12 @@ function cmdDiff() {
   console.log(`  added   ${d.added.length} 件`);
   if (d.rotated.length) {
     const top = d.rotated.slice().sort((x, y) => y.delta - x.delta).slice(0, 3);
-    for (const m of top) console.log(`          #${pad(m.id, 4)}转了 ${m.delta}°  ${m.from} → ${m.to}`);
+    for (const m of top) console.log(`          ${pad(shortKey(m.id), 16)}转了 ${m.delta}°  ${m.from} → ${m.to}`);
   }
   if (d.moved.length) {
     const top = d.moved.slice().sort((x, y) => y.distance - x.distance).slice(0, 5);
     for (const m of top) {
-      console.log(`          #${pad(m.id, 4)}${pad(m.region, 12)}位移 ${m.distance}`);
+      console.log(`          ${pad(shortKey(m.id), 16)}${pad(m.region, 12)}位移 ${m.distance}`);
     }
   }
   console.log('');

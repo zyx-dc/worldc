@@ -234,7 +234,8 @@ class Parser {
       throw new Error(`第 ${what ? what.line : 0} 行：pin 后面要跟 item:<id>`);
     }
     this.expectPunc(':');
-    const item = this.expectNum();
+    // 素材身份由内容派生（bv_BV1bc41147oe 这种）；数字形式只为兼容旧文件
+    const item = this.peek().t === T.STR ? this.expectStr() : String(this.expectNum());
 
     const at = this.acceptIdent();
     if (!at || at.v !== 'at') throw new Error(`第 ${at ? at.line : 0} 行：pin 缺少 at`);

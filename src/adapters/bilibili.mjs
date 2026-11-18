@@ -68,7 +68,7 @@ export async function fetchFolder(fid, { mid = null, max = 240 } = {}) {
       if (!m.cover || !m.title) continue;
       const ts = (m.pubtime || 0) * 1000;
       items.push({
-        id: items.length,
+        key: `bv_${m.bvid || 'x' + m.id}`,
         title: m.title,
         cover: String(m.cover).replace(/^http:\/\//, 'https://'),
         ts,
@@ -88,7 +88,7 @@ export async function fetchFolder(fid, { mid = null, max = 240 } = {}) {
 
   // 按发布时间正序：走廊入口 = 最早
   items.sort((a, b) => a.ts - b.ts);
-  items.forEach((it, i) => { it.id = i; });
+  // 不再按排序位置重编号 —— 身份来自 bvid，排序只影响顺序
 
   return { info, items };
 }

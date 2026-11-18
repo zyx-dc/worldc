@@ -32,5 +32,5 @@ world "我的收藏夹" {
   }
 
   # 覆盖层：这一件我不满意机器给我的位置，手动钉在这里
-  pin item:42 at -3.2 0 -1.5 rot 30
+  pin item:"bv_BV1mpNDeZECY" at -3.2 0 -1.5 rot 30
 }

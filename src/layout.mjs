@@ -24,7 +24,7 @@ export function layoutRegion(region, items, seed) {
     const rot = (rnd() - 0.5) * 8;
 
     return {
-      item: item.id,
+      item: item.key,
       title: item.title,
       year: item.year,
       cover: item.cover,

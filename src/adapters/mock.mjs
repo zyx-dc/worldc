@@ -39,7 +39,7 @@ export function mockItems(n = 120, seed = 'mock-v1') {
       const p = PREFIX[Math.floor(rnd() * PREFIX.length)];
       const noun = NOUN[Math.floor(rnd() * NOUN.length)];
       items.push({
-        id,
+        key: `mock_${id}`,
         title: `${p}${noun}`,
         year,
         owner: OWNER[Math.floor(rnd() * OWNER.length)],
@@ -52,7 +52,7 @@ export function mockItems(n = 120, seed = 'mock-v1') {
   while (items.length < n) {
     const year = 2015 + Math.floor(rnd() * 12);
     items.push({
-      id: items.length,
+      key: `mock_${items.length}`,
       title: `${PREFIX[Math.floor(rnd() * PREFIX.length)]}${NOUN[Math.floor(rnd() * NOUN.length)]}`,
       year,
       owner: OWNER[Math.floor(rnd() * OWNER.length)],

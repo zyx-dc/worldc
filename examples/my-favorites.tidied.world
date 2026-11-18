@@ -30,7 +30,7 @@ world "我的收藏夹" {
     layout grid 4 6
   }
 
-  pin item:42 at -3.2 0 -1.5 rot 30
-  pin item:77 at 6.4 0 2.1 rot -12
-  pin item:91 at -6.4 0 3.8 rot 18
+  pin item:"bv_BV1mpNDeZECY" at -3.2 0 -1.5 rot 30
+  pin item:"bv_BV165zMBpEPz" at 6.4 0 2.1 rot -12
+  pin item:"bv_BV14bFTz2Exo" at -6.4 0 3.8 rot 18
 }

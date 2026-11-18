@@ -30,8 +30,10 @@ console.log('\n  worldc · 星海布局回归');
 console.log('  ' + '─'.repeat(58));
 
 const glb = readGlb(P('viewer/assets/space.glb'));
-const frames = glb.nodes.filter(n => /^frame_\d+$/.test(n.name || ''));
-const glbIds = new Set(frames.map(n => Number(n.name.split('_')[1])));
+// 节点名是 frame_<key>，key 本身含下划线（bv_BV1bc…），所以只能去掉前缀、不能 split
+const keyOf = name => String(name).replace(/^frame_/, '');
+const frames = glb.nodes.filter(n => /^frame_.+$/.test(n.name || ''));
+const glbIds = new Set(frames.map(n => keyOf(n.name)));
 
 const world = parseWorld(readFileSync(P('examples/bilibili-demo.world'), 'utf8'));
 const items = JSON.parse(readFileSync(P('examples/bilibili-demo.items.json'), 'utf8'));
@@ -56,7 +58,7 @@ check('主画数量与展区数一致', heroes.length === ir.regions.length,
 
 // 4. extras 里的 region 与 IR 一致
 const badRegion = frames.filter(n => {
-  const e = ir.regions.flatMap(r => r.exhibits.map(x => ({ ...x, rn: r.name }))).find(x => x.item === Number(n.name.split('_')[1]));
+  const e = ir.regions.flatMap(r => r.exhibits.map(x => ({ ...x, rn: r.name }))).find(x => x.item === keyOf(n.name));
   return e && n.extras?.region !== e.rn;
 });
 check('extras.region 与 IR 展区一致', badRegion.length === 0, badRegion.length ? `${badRegion.length} 处不符` : '全部一致');
@@ -64,9 +66,10 @@ check('extras.region 与 IR 展区一致', badRegion.length === 0, badRegion.len
 // 5. pin 写回：星海模式下 pos 就是世界坐标，编译后必须原样保留
 const pinX = 12.345, pinZ = -67.891, pinRot = 37;
 const w2 = structuredClone(world);
-w2.pins = [{ item: 7, pos: [pinX, 0, pinZ], rot: pinRot }];
+const someKey = [...irIds][7];
+w2.pins = [{ item: someKey, pos: [pinX, 0, pinZ], rot: pinRot }];
 const { ir: ir2 } = compile(w2, items);
-const ex = ir2.regions.flatMap(r => r.exhibits).find(e => e.item === 7);
+const ex = ir2.regions.flatMap(r => r.exhibits).find(e => e.item === someKey);
 const dx = Math.abs(ex.pos[0] - pinX);
 const dz = Math.abs(ex.pos[2] - pinZ);
 check('pin 落点误差 < 1e-3', dx < 1e-3 && dz < 1e-3 && ex.rot === pinRot && ex.pinned === true,
@@ -86,8 +89,7 @@ if (existsSync(layoutPath)) {
   const byId = new Map(list.map(x => [x.item ?? x.id, x]));
   let mismatch = 0;
   for (const n of frames) {
-    const id = Number(n.name.split('_')[1]);
-    const l = byId.get(id);
+    const l = byId.get(keyOf(n.name));
     if (!l) continue;
     const p = l.pos || l.position || [0, 0, 0];
     const t = n.translation || [0, 0, 0];

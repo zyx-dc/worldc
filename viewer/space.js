@@ -153,10 +153,10 @@ const WORLD_UP = new THREE.Vector3(0, 1, 0);
 const PLANE_FRONT = new THREE.Vector3(0, 1, 0);
 
 gltf.scene.traverse((o) => {
-  const m = /^frame_(\d+)$/.exec(o.name || '');
+  const m = /^frame_(.+)$/.exec(o.name || '');
   if (!m) return;
 
-  const id = Number(m[1]);
+  const id = m[1];
   if (seen.has(id)) return;
 
   let mesh = o.isMesh ? o : null;
@@ -587,7 +587,9 @@ function scheduleCompile(delay = 200) {
 }
 
 function upsertPin(itemId, x, z, rotDeg) {
-  const line = `  pin item:${itemId} at ${fmt(x)} 0 ${fmt(z)} rot ${rotDeg}`;
+  // key 是字符串（bv_xxx），写进 DSL 要带引号；纯数字则为旧格式
+  const ref = /^\d+$/.test(String(itemId)) ? String(itemId) : `"${itemId}"`;
+  const line = `  pin item:${ref} at ${fmt(x)} 0 ${fmt(z)} rot ${rotDeg}`;
   const re = new RegExp(`^[ \\t]*pin item:${itemId}\\b.*$`, 'm');
   if (re.test(srcText)) srcText = srcText.replace(re, line);
   else srcText = srcText.replace(/(\n)\s*\}\s*$/, `$1${line}\n}\n`);
@@ -626,7 +628,7 @@ const PLAY_FAR = 34;    // 走远了自动停
 const bvidById = new Map();
 try {
   const raw = await fetch('../build/scene.items.json').then(r => (r.ok ? r.json() : []));
-  for (const it of raw) if (it.bvid) bvidById.set(it.id, it.bvid);
+  for (const it of raw) if (it.bvid) bvidById.set(it.key ?? it.id, it.bvid);
 } catch { /* 没有 items.json 就只是不能播 */ }
 
 const cardEl = $('card');

@@ -296,7 +296,9 @@ function scheduleCompile(delay = 220) {
 
 /** 把一次拖动写回源码：有就改，没有就追加 */
 function upsertPin(itemId, x, z, rotDeg) {
-  const line = `  pin item:${itemId} at ${fmt(x)} 0 ${fmt(z)} rot ${rotDeg}`;
+  // key 是字符串（bv_xxx），写进 DSL 要带引号；纯数字则为旧格式
+  const ref = /^\d+$/.test(String(itemId)) ? String(itemId) : `"${itemId}"`;
+  const line = `  pin item:${ref} at ${fmt(x)} 0 ${fmt(z)} rot ${rotDeg}`;
   const re = new RegExp(`^[ \\t]*pin item:${itemId}\\b.*$`, 'm');
   if (re.test(srcText)) {
     srcText = srcText.replace(re, line);
