@@ -20,7 +20,13 @@ $('app').appendChild(renderer.domElement);
 const scene = new THREE.Scene();
 scene.fog = new THREE.FogExp2(0x071226, 0.0035);
 
+// 光晕/光边只放在这一层：主相机能看到，反射相机看不到。
+// 反射通道里画它们纯属浪费 —— 120 个 sprite + 120 条光边，
+// 而水面只采到一点点光，根本看不出差别。
+const NO_REFLECT = 1;
+
 const camera = new THREE.PerspectiveCamera(55, innerWidth / innerHeight, 0.1, 4000);
+camera.layers.enable(NO_REFLECT);
 camera.rotation.order = 'YXZ';
 camera.position.set(Number(q.get('x') ?? 0), 3.0, Number(q.get('z') ?? 6));
 
@@ -211,6 +217,7 @@ gltf.scene.traverse((o) => {
       blending: THREE.AdditiveBlending,
       depthWrite: false,
     }));
+    sp.layers.set(NO_REFLECT);
     sp.position.copy(center).addScaledVector(normal, -0.3);
     sp.scale.set(size.x * f, size.y * f, 1);
     scene.add(sp);
@@ -228,6 +235,7 @@ gltf.scene.traverse((o) => {
       depthWrite: false,
     })
   );
+  rim.layers.set(NO_REFLECT);
   mesh.add(rim);   // 作为子节点，自动继承画框的位移/旋转/缩放
 
   panels.push({
@@ -276,7 +284,7 @@ pump();
 
 // ── 水面：实时平面反射（spec 附录 A） ────────────────────────
 const WATER_ON = q.get('water') !== '0';
-const REFL_SCALE = Number(q.get('refl') ?? 0.5);   // 半分辨率
+const REFL_SCALE = Number(q.get('refl') ?? 0.75);  // 0.75 分辨率：倒影清楚得多，代价可接受
 
 const rtSize = new THREE.Vector2();
 renderer.getSize(rtSize);
@@ -313,8 +321,10 @@ const waterUniforms = {
   uDeep: { value: new THREE.Color(0x050b16) },
   uFog: { value: skyHorizonColor(sky) },
   uTime: { value: 0 },
-  uAmp: { value: 0.0026 },
-  uBlur: { value: 0.0035 },
+  uBlur: { value: 0.0011 },
+  // 月光方向：从远处斜上方打过来，水面上会拉出一条竖直碎光带
+  uMoon: { value: new THREE.Vector3(0.22, 0.40, -0.89).normalize() },
+  uSpec: { value: 1.05 },
 };
 
 const water = new THREE.Mesh(
@@ -339,38 +349,91 @@ const water = new THREE.Mesh(
       uniform vec3 uDeep;
       uniform vec3 uFog;
       uniform float uTime;
-      uniform float uAmp;
       uniform float uBlur;
+      uniform vec3 uMoon;
+      uniform float uSpec;
       varying vec4 vProj;
       varying vec3 vWorld;
+
+      // 四组行波叠加，返回高度，梯度用 out 带出来。
+      // 波向互不平行、频率成倍 —— 否则一眼能看出是几条正弦。
+      float waves(vec2 q, float t, out vec2 grad) {
+        grad = vec2(0.0);
+        float h = 0.0;
+
+        float a1 = dot(q, vec2(0.62, 0.38));
+        float p1 = a1 * 0.30 + t * 0.55;
+        h += sin(p1) * 0.50;
+        grad += vec2(0.62, 0.38) * 0.30 * cos(p1) * 0.50;
+
+        float a2 = dot(q, vec2(-0.45, 0.80));
+        float p2 = a2 * 0.55 - t * 0.75;
+        h += sin(p2) * 0.32;
+        grad += vec2(-0.45, 0.80) * 0.55 * cos(p2) * 0.32;
+
+        float a3 = dot(q, vec2(0.90, -0.42));
+        float p3 = a3 * 1.35 + t * 1.45;
+        h += sin(p3) * 0.12;
+        grad += vec2(0.90, -0.42) * 1.35 * cos(p3) * 0.12;
+
+        return h;
+      }
+
       void main() {
         vec2 p = vProj.xy / vProj.w;
-        float d = length(vWorld.xz - cameraPosition.xz);
-        float amp = uAmp / (1.0 + 0.045 * d);
+        vec2 q = vWorld.xz;
+        float d = length(q - cameraPosition.xz);
 
-        // 横向波纹细碎，竖向拉得更长 —— 倒影才不会像一块镜面地板
-        p.x += sin(vWorld.z * 0.62 + uTime * 0.85) * amp;
-        p.y += cos(vWorld.x * 0.47 + uTime * 0.63) * amp * 2.4;
+        // 330m 外已经是全透明，没必要再算一遍波和采样
+        float alpha = 1.0 - smoothstep(90.0, 330.0, d);
+        if (alpha <= 0.002) discard;
 
-        // 竖向 5 次采样：把亮画框摊成竖直光带
-        vec3 refl = vec3(0.0);
-        float wsum = 0.0;
-        for (int i = -2; i <= 2; i++) {
-          float fi = float(i);
-          float w = 1.0 - abs(fi) * 0.28;
-          vec2 uv = clamp(p + vec2(0.0, fi * uBlur), vec2(0.001), vec2(0.999));
-          refl += texture2D(tRefl, uv).rgb * w;
-          wsum += w;
-        }
-        refl = (refl / wsum) * 0.92;   // 水会吸收，倒影比实物略暗
+        // 远处的波纹在屏幕上更密，先压一压，免得变成摩尔纹
+        float atten = 1.0 / (1.0 + 0.05 * d);
+
+        vec2 grad;
+        float h = waves(q, uTime, grad);
+
+        // 扰动反射坐标：横向细碎、竖向拉长 —— 倒影才会被"打碎"而不是整块平移
+        p += vec2(grad.x * 0.0011 + grad.y * 0.0009, grad.y * 0.0038) * atten;
+
+        // 竖向多次采样，把亮画框摊成竖直光带
+        vec3 refl = texture2D(tRefl, clamp(p, vec2(0.001), vec2(0.999))).rgb * 0.5;
+        refl += texture2D(tRefl, clamp(p + vec2(0.0, uBlur), vec2(0.001), vec2(0.999))).rgb * 0.25;
+        refl += texture2D(tRefl, clamp(p - vec2(0.0, uBlur), vec2(0.001), vec2(0.999))).rgb * 0.25;
+        refl *= 0.93;   // 水会吸收，倒影比实物略暗
 
         vec3 V = normalize(cameraPosition - vWorld);
         float fres = pow(1.0 - clamp(V.y, 0.0, 1.0), 2.0);
-        vec3 col = mix(uDeep, refl, 0.26 + 0.56 * fres);
+
+        vec3 col = mix(uDeep, refl, 0.30 + 0.60 * fres);
+
+        // 天穹漫反射：把整个天空当成一个柔光源。
+        // 没有这一项的话，俯视时水面就是一片纯黑 —— 波纹的起伏完全看不出来。
+        vec3 Hn = normalize(vec3(0.0, 1.0, 0.0) + V);
+        float dome = pow(max(dot(normalize(vec3(-grad.x * 0.05 * atten, 1.0, -grad.y * 0.05 * atten)), Hn), 0.0), 3.0);
+        col += vec3(0.16, 0.26, 0.42) * dome * (0.25 + 0.75 * fres);
+
+        // 波峰微亮：让暗处也能看出水的起伏，而不是一块黑板
+        col += uFog * (clamp(h * 0.55 + 0.5, 0.0, 1.0) - 0.5) * 0.10;
+
+        // ── 月光碎光带 ────────────────────────────────────
+        // 法线由同一个梯度场给出，所以高光和倒影的扰动是同步的 ——
+        // 两者错位的话，一眼就能看出"光和水不是一回事"。
+        // 法线也用同一份梯度，并且随距离衰减 —— 不衰减的话，
+        // 远处每个像素覆盖好几条波，高光会混叠成规则条纹（看着像地砖）
+        vec3 N = normalize(vec3(-grad.x * 0.05 * atten, 1.0, -grad.y * 0.05 * atten));
+        vec3 H = normalize(normalize(uMoon) + V);
+        float ndh = max(dot(N, H), 0.0);
+
+        // 用波高调制，而不是再叠一条正弦：正弦在屏幕上是规则条纹，
+        // 一混叠就变成"贴了花纹的地板"
+        float sparkle = 0.55 + 0.45 * clamp(h * 0.9 + 0.5, 0.0, 1.0);
+        float spec = pow(ndh, 46.0) * sparkle * 0.60 + pow(ndh, 7.0) * 0.085;
+        col += vec3(0.85, 0.92, 1.0) * spec * uSpec * (0.30 + 0.70 * fres);
 
         // 远端渐隐为透明，让天空透出来 —— 比硬染色去接缝可靠得多
         col = mix(col, uFog, smoothstep(40.0, 220.0, d) * 0.55);
-        float alpha = 1.0 - smoothstep(90.0, 330.0, d);
         gl_FragColor = vec4(col, alpha);
       }
     `,
@@ -383,6 +446,7 @@ scene.add(water);
 
 // 镜像相机
 const mirrorCam = new THREE.PerspectiveCamera();
+mirrorCam.layers.set(0);   // 只看第 0 层：光晕/光边不参与反射
 const N = new THREE.Vector3(0, 1, 0);
 const O = new THREE.Vector3(0, 0, 0);
 const _p = new THREE.Vector3();
