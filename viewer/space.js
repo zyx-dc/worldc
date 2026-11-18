@@ -113,15 +113,22 @@ function alignUv(tex) {
   return tex;
 }
 
-const HALO = (() => {  const S = 256;
+// 辉光渐变：**环形**，不是中心最亮的光斑。
+// 光斑贴在画框背后时，中心会被画框完全挡住，能看见的只有外围尾巴；
+// 中心最亮的写法等于把能量全浪费在被遮住的区域 —— 前几版看不出辉光就是这个原因。
+// 峰值放在 r=0.5（sprite 取 2 倍尺寸时，画框边缘正好在这一圈），向外淡出。
+const HALO = (() => {
+  const S = 256;
   const c = document.createElement('canvas');
   c.width = c.height = S;
   const g = c.getContext('2d');
   const grd = g.createRadialGradient(S / 2, S / 2, 0, S / 2, S / 2, S / 2);
-  grd.addColorStop(0, 'rgba(255,255,255,.95)');
-  grd.addColorStop(0.28, 'rgba(255,255,255,.42)');
-  grd.addColorStop(0.62, 'rgba(255,255,255,.11)');
-  grd.addColorStop(1, 'rgba(255,255,255,0)');
+  grd.addColorStop(0.00, 'rgba(255,255,255,0)');
+  grd.addColorStop(0.62, 'rgba(255,255,255,0)');
+  grd.addColorStop(0.76, 'rgba(255,255,255,0.06)');
+  grd.addColorStop(0.85, 'rgba(255,255,255,0.85)');
+  grd.addColorStop(0.92, 'rgba(255,255,255,0.22)');
+  grd.addColorStop(1.00, 'rgba(255,255,255,0)');
   g.fillStyle = grd;
   g.fillRect(0, 0, S, S);
   const t = new THREE.CanvasTexture(c);
@@ -183,10 +190,15 @@ gltf.scene.traverse((o) => {
   }
 
   // 外缘辉光：挂在画框「背后」一点，靠深度测试让中心被画框挡住，只露外圈
-  const factors = hero ? [[2.0, 0.34], [3.5, 0.12]] : [[1.6, 0.16]];
-  normal.set(0, 0, 1).applyQuaternion(mesh.getWorldQuaternion(tmpQ));
+  // 注意这里必须用 PLANE_FRONT（局部 +Y），用 (0,0,1) 会算成世界朝下的法线，
+  // sprite 就变成往上偏移，中心全被画框挡住，辉光几乎等于没有。
+  // 几何对齐：sprite 取 1.28 倍画框时，画框边缘恰好落在 UV 半径 1/1.28 ≈ 0.78 处，
+  // 所以贴图的峰値必须放在 0.80（而不是 0.5）。放 0.5 的话峰值藏在画框背后被遮住，
+  // 能看见的只有外围长尾巴 —— 那会看起来像背景渐变，不像光晕。
+  const factors = (q.get("halo") === "0") ? [] : (hero ? [[1.18, 0.82]] : [[1.16, 0.32]]);
+  normal.copy(PLANE_FRONT).applyQuaternion(mesh.getWorldQuaternion(tmpQ));
 
-  const tint = new THREE.Color().setHSL(info.hue / 360, 0.5, 0.62, THREE.SRGBColorSpace);
+  const tint = new THREE.Color().setHSL(info.hue / 360, 0.42, 0.74, THREE.SRGBColorSpace);
   const halos = [];
   for (const [f, opacity] of factors) {
     const sp = new THREE.Sprite(new THREE.SpriteMaterial({
@@ -202,6 +214,19 @@ gltf.scene.traverse((o) => {
     scene.add(sp);
     halos.push(sp);
   }
+
+  // 冷白光边：画框没有边框，靠一条加法亮线把轮廓括出来，否则就是一张贴纸
+  const rim = new THREE.LineSegments(
+    new THREE.EdgesGeometry(mesh.geometry),
+    new THREE.LineBasicMaterial({
+      color: 0xcfe6ff,
+      transparent: true,
+      opacity: hero ? 0.85 : 0.5,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false,
+    })
+  );
+  mesh.add(rim);   // 作为子节点，自动继承画框的位移/旋转/缩放
 
   panels.push({
     mesh, id, hero, size,

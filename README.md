@@ -98,26 +98,41 @@ test/determinism.mjs     架构承诺的可执行验证
 同一份 IR → 3D 漫游（three.js）+ 2D 导览图（SVG），数据一行不改
 ```
 
-## 星海模式（规划中）
+## 星海模式
 
-第三条后端：**Blender 建场 → glTF → three.js 实时漫游**。120 件收藏按种子随机散在一片静水上，
+第三个后端：**Blender 建场 → glTF → three.js 实时漫游**。120 件收藏按种子随机散在一片静水上，
 每个展区一幅主画框，水面做实时平面反射；同一份收藏夹永远同一片星海。
 
-这与上面的「零资产」承诺不冲突：主链路仍然是纯程序；星海模式的 glb 与天空贴图都由脚本生成，
-随世界重新生成，仓库里只放一份 demo 产物（glb 112 KB + sky 358 KB）。
+与「零资产」承诺不冲突：主链路仍是纯程序；星海模式的 glb 与天空贴图都由脚本生成，
+随世界重新生成，仓库里只放一份 demo 产物（glb 111 KB + sky 344 KB）。
 
 - 设计与验收：`docs/space-mode.md`
-- 生成脚本：`tools/blender/space_scene.py`
-- 预览：`docs/preview-space-entry.jpg`、`docs/preview-space-hero.jpg`
+- 生成脚本：`tools/blender/space_scene.py`（环境与踩坑见同目录 README）
+- 页面：`viewer/space.html`
+- 预览：`docs/preview-space.png`、`docs/preview-space-hero.png`
 
 ```bash
 node src/cli.mjs build examples/bilibili-demo.world --out build/scene.json
 BLENDER="/c/Program Files/Blender Foundation/Blender 5.2/blender.exe"
 "$BLENDER" -b -P tools/blender/space_scene.py -- \
   --ir build/scene.json --cache cache/covers --out viewer/assets --no-render
+node serve.mjs
+# http://localhost:5173/viewer/space.html
 ```
 
-网页端 `viewer/space.html` 尚未实现。
+| 参数 | 作用 |
+|---|---|
+| `?gate=0` · `?hud=0` | 关入场层 · 关界面（录屏用） |
+| `?x= ?y= ?z= ?yaw= ?pitch=` | 指定机位 |
+| `?water=0` · `?halo=0` | 关水面 · 关辉光（对照用） |
+| `?refl=0.5` | 反射分辨率倍率 |
+| `?edit=1` 或 <code>`</code> | 开源码面板；拖动画框会写回一条 pin |
+
+操作：`W A S D` 平移，`Q / E` 升降，拖动鼠标环顾。
+
+> 注意：`Q/E` 升降是调试用的，和 spec §4「无飞行」冲突；要守调性的话
+> 可以改成只有 `?fly=1` 时才允许。**pin 在星海模式下直接当世界坐标**（y 取 glb 高度），
+> 与旧走廊后端的局部坐标语义不同，两边的 `.world` 不能混用。
 
 ## 四条承诺
 
