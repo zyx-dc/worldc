@@ -157,9 +157,10 @@ class Parser {
       pins: [],
     };
 
+    let closed = false;
     while (!this.atEnd()) {
       const t = this.peek();
-      if (t.t === T.PUNC && t.v === '}') { this.i++; break; }
+      if (t.t === T.PUNC && t.v === '}') { this.i++; closed = true; break; }
 
       const kw = this.acceptIdent();
       if (!kw) throw new Error(`第 ${t.line} 行：期望指令，实际是 "${t.v}"`);
@@ -185,7 +186,14 @@ class Parser {
       }
     }
 
+    // 审计 A-06：循环是因为读到文件末尾才退出的，说明块没闭合
+    if (!closed) throw new Error('世界块没有闭合 —— 缺少结尾的 }');
     if (world.seed === null) throw new Error('缺少 seed —— 没有种子就没有可复现的世界');
+    // 审计 A-06：} 之后还有内容就报错，而不是静默丢掉
+    if (!this.atEnd()) {
+      const rest = this.peek();
+      throw new Error(`第 ${rest.line} 行：世界块已结束，后面还有多余内容 "${rest.v}"`);
+    }
     return world;
   }
 
@@ -202,9 +210,10 @@ class Parser {
       capacity: 16,
     };
 
+    let closed = false;
     while (!this.atEnd()) {
       const t = this.peek();
-      if (t.t === T.PUNC && t.v === '}') { this.i++; break; }
+      if (t.t === T.PUNC && t.v === '}') { this.i++; closed = true; break; }
 
       const kw = this.acceptIdent();
       if (!kw) throw new Error(`第 ${t.line} 行：期望 region 内指令`);

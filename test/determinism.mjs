@@ -108,6 +108,15 @@ check('D4 空间 diff：能定位到具体展品和位移', dPin.moved[0]?.id ==
   check('A-07 importer 产出的源码可被解析', ok, msg);
 }
 
+// A-06：块未闭合、} 之后还有内容，都必须报错而不是静默吞掉
+{
+  let e1 = '', e2 = '';
+  try { parseWorld('world "a" {\n  seed 1\n'); } catch (e) { e1 = e.message; }
+  try { parseWorld('world "a" {\n  seed 1\n}\nregion "b" { }\n'); } catch (e) { e2 = e.message; }
+  check('A-06 未闭合的块会报错', /没有闭合/.test(e1), e1.slice(0, 24));
+  check('A-06 尾随内容会报错', /多余内容/.test(e2), e2.slice(0, 28));
+}
+
 console.log('');
 console.log(`  ${pass} 通过 · ${fail} 失败`);
 console.log('');
