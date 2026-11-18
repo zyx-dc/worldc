@@ -58,6 +58,28 @@ check('D3 零资产：场景图 < 64 KB', a1.stats.bytes < 64 * 1024, `${(a1.sta
 check('D4 空间 diff：能定位到具体展品和位移', dPin.moved[0]?.id === 77 && dPin.moved[0].distance > 0,
   dPin.moved[0] ? `#${dPin.moved[0].id} 位移 ${dPin.moved[0].distance}` : '无');
 
+// ── 审计整改回归（对应报告 A-02 / A-05） ──────────────────────
+// A-02：seed 不能掺 items.length，否则收藏夹多一条就让整片星海重排
+{
+  const { buildWorldFromItems } = await import('../src/importer.mjs');
+  const base = mockItems(24);
+  const opt = { title: 't', source: 'test', seedKey: 'same-world' };
+  const s10 = (await buildWorldFromItems(base.slice(0, 10), opt)).seed;
+  const s11 = (await buildWorldFromItems(base.slice(0, 11), opt)).seed;
+  check('A-02 增删素材不改变 seed', s10 === s11, `10 条=${s10} / 11 条=${s11}`);
+}
+
+// A-05：只转不移也要被 diff 记录到，否则「转了一下」等于没发生
+{
+  const wA = structuredClone(world);
+  wA.pins = [...world.pins, { item: 60, pos: [5, 0, -5], rot: 10 }];
+  const wB = structuredClone(world);
+  wB.pins = [...world.pins, { item: 60, pos: [5, 0, -5], rot: 55 }];
+  const d = diff(compile(wA, items).ir, compile(wB, items).ir);
+  check('A-05 只改旋转也能被 diff 识别', d.rotated.length === 1 && d.moved.length === 0,
+    `rotated=${d.rotated.length} moved=${d.moved.length} Δ${d.rotated[0]?.delta ?? '-'}°`);
+}
+
 console.log('');
 console.log(`  ${pass} 通过 · ${fail} 失败`);
 console.log('');

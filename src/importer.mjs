@@ -62,7 +62,10 @@ export async function buildWorldFromItems(items, opt) {
     };
   });
 
-  const seed = hash32(`${seedKey}|${items.length}|v1`);
+  // seed 只取决于世界身份与算法版本，**不能**掺 items.length。
+  // 掺进去的后果：收藏夹多一条，seed 就变，整片布局重排 ——
+  // 与「同一份收藏夹永远同一片星海」直接冲突。
+  const seed = hash32(`${seedKey}|world-v1`);
   const head = [
     '# 由 worldc import 生成 —— 这是一份源码，不是场景。',
     '# 想改世界就改这个文件，然后重新 build。改一行不会动到别的展品。',

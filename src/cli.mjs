@@ -116,8 +116,14 @@ function cmdDiff() {
   console.log(`  a       ${a}  ${A.hash.slice(0, 12)}`);
   console.log(`  b       ${b}  ${B.hash.slice(0, 12)}`);
   console.log(`  moved   ${d.moved.length} 件`);
+  console.log(`  rotated ${d.rotated.length} 件`);
+  console.log(`  region  ${d.regionChanged.length} 件`);
   console.log(`  gone    ${d.gone.length} 件`);
   console.log(`  added   ${d.added.length} 件`);
+  if (d.rotated.length) {
+    const top = d.rotated.slice().sort((x, y) => y.delta - x.delta).slice(0, 3);
+    for (const m of top) console.log(`          #${pad(m.id, 4)}转了 ${m.delta}°  ${m.from} → ${m.to}`);
+  }
   if (d.moved.length) {
     const top = d.moved.slice().sort((x, y) => y.distance - x.distance).slice(0, 5);
     for (const m of top) {

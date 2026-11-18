@@ -105,19 +105,37 @@ export function diff(irA, irB) {
   const A = index(irA);
   const B = index(irB);
 
+  const POS_EPS = 1e-3;    // 米
+  const ROT_EPS = 0.05;    // 度
+
+  const normDeg = a => { const x = (a ?? 0) % 360; return x < 0 ? x + 360 : x; };
+  const angDiff = (a, b) => {
+    const d = Math.abs(normDeg(a) - normDeg(b));
+    return Math.min(d, 360 - d);
+  };
+
   const moved = [];
+  const rotated = [];
+  const regionChanged = [];
   const gone = [];
   const added = [];
 
   for (const [id, a] of A) {
     const b = B.get(id);
     if (!b) { gone.push(a); continue; }
+
     const d = Math.hypot(a.pos[0] - b.pos[0], a.pos[1] - b.pos[1], a.pos[2] - b.pos[2]);
-    if (d > 1e-6) moved.push({ id, from: a.pos, to: b.pos, distance: Number(d.toFixed(3)), region: b.region });
+    if (d > POS_EPS) moved.push({ id, from: a.pos, to: b.pos, distance: Number(d.toFixed(3)), region: b.region });
+
+    // 只转不移也要报出来，否则「转了一下」在 diff 里等于没发生
+    const ad = angDiff(a.rot, b.rot);
+    if (ad > ROT_EPS) rotated.push({ id, from: a.rot ?? 0, to: b.rot ?? 0, delta: Number(ad.toFixed(2)) });
+
+    if (a.region !== b.region) regionChanged.push({ id, from: a.region, to: b.region });
   }
   for (const [id, b] of B) if (!A.has(id)) added.push(b);
 
-  return { moved, gone, added };
+  return { moved, rotated, regionChanged, gone, added };
 }
 
 export { hash32 };

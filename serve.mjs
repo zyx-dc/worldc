@@ -3,10 +3,21 @@
 
 import { createServer } from 'node:http';
 import { readFile, writeFile, mkdir } from 'node:fs/promises';
-import { extname, join, normalize, dirname } from 'node:path';
+import { extname, join, normalize, dirname, resolve, relative, isAbsolute, sep } from 'node:path';
 import { createHash } from 'node:crypto';
 
-const root = process.cwd();
+const root = resolve(process.cwd());
+
+/**
+ * 判断目标是否真的在 root 之内。
+ * 不能用 target.startsWith(root) —— 字符串前缀不等于路径包含：
+ * root=/tmp/worldc 时，/tmp/worldc-secret/x.world 也"以它开头"，但它在根目录外。
+ * 用 path.relative 判断，并显式排除 '..' 开头与仍为绝对路径的结果。
+ */
+function insideRoot(target) {
+  const rel = relative(root, target);
+  return !!rel && rel !== '..' && !rel.startsWith('..' + sep) && !isAbsolute(rel);
+}
 const port = Number(process.argv[2] || 5173);
 const COVER_DIR = join(root, 'cache', 'covers');
 
@@ -68,8 +79,8 @@ createServer(async (req, res) => {
       const chunks = [];
       for await (const c of req) chunks.push(c);
       const body = JSON.parse(Buffer.concat(chunks).toString('utf8') || '{}');
-      const target = normalize(join(root, String(body.path || 'build/scene.world')));
-      if (!target.startsWith(root) || !target.endsWith('.world')) {
+      const target = resolve(join(root, String(body.path || 'build/scene.world')));
+      if (!insideRoot(target) || !target.endsWith('.world')) {
         res.writeHead(400, { 'Content-Type': 'text/plain; charset=utf-8' }).end('只允许写项目内的 .world 文件');
         return;
       }
@@ -87,8 +98,8 @@ createServer(async (req, res) => {
     }
 
     let p = p0.endsWith('/') ? p0 + 'index.html' : p0;
-    const file = normalize(join(root, p));
-    if (!file.startsWith(root)) { res.writeHead(403).end('forbidden'); return; }
+    const file = resolve(join(root, p));
+    if (!insideRoot(file)) { res.writeHead(403).end('forbidden'); return; }
 
     const buf = await readFile(file);
     res.writeHead(200, {
