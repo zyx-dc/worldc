@@ -124,10 +124,12 @@ const HALO = (() => {
   const g = c.getContext('2d');
   const grd = g.createRadialGradient(S / 2, S / 2, 0, S / 2, S / 2, S / 2);
   grd.addColorStop(0.00, 'rgba(255,255,255,0)');
-  grd.addColorStop(0.62, 'rgba(255,255,255,0)');
-  grd.addColorStop(0.76, 'rgba(255,255,255,0.06)');
-  grd.addColorStop(0.85, 'rgba(255,255,255,0.85)');
-  grd.addColorStop(0.92, 'rgba(255,255,255,0.22)');
+  grd.addColorStop(0.00, 'rgba(255,255,255,0)');
+  grd.addColorStop(0.42, 'rgba(255,255,255,0)');
+  grd.addColorStop(0.50, 'rgba(255,255,255,0.50)');
+  grd.addColorStop(0.62, 'rgba(255,255,255,0.32)');
+  grd.addColorStop(0.78, 'rgba(255,255,255,0.13)');
+  grd.addColorStop(0.90, 'rgba(255,255,255,0.04)');
   grd.addColorStop(1.00, 'rgba(255,255,255,0)');
   g.fillStyle = grd;
   g.fillRect(0, 0, S, S);
@@ -195,7 +197,7 @@ gltf.scene.traverse((o) => {
   // 几何对齐：sprite 取 1.28 倍画框时，画框边缘恰好落在 UV 半径 1/1.28 ≈ 0.78 处，
   // 所以贴图的峰値必须放在 0.80（而不是 0.5）。放 0.5 的话峰值藏在画框背后被遮住，
   // 能看见的只有外围长尾巴 —— 那会看起来像背景渐变，不像光晕。
-  const factors = (q.get("halo") === "0") ? [] : (hero ? [[1.18, 0.82]] : [[1.16, 0.32]]);
+  const factors = (q.get("halo") === "0") ? [] : (hero ? [[2.0, 0.55]] : [[1.9, 0.22]]);
   normal.copy(PLANE_FRONT).applyQuaternion(mesh.getWorldQuaternion(tmpQ));
 
   const tint = new THREE.Color().setHSL(info.hue / 360, 0.42, 0.74, THREE.SRGBColorSpace);
