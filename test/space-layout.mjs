@@ -5,6 +5,7 @@ import { readFileSync, existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { parseWorld } from '../src/parse.mjs';
+import { mockItems } from '../src/adapters/mock.mjs';
 import { compile } from '../src/compile.mjs';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
@@ -36,16 +37,32 @@ const frames = glb.nodes.filter(n => /^frame_.+$/.test(n.name || ''));
 const glbIds = new Set(frames.map(n => keyOf(n.name)));
 
 const world = parseWorld(readFileSync(P('examples/bilibili-demo.world'), 'utf8'));
-const items = JSON.parse(readFileSync(P('examples/bilibili-demo.items.json'), 'utf8'));
+
+// demo 的 items.json 含第三方内容，不入库。干净克隆时退回 mock 数据：
+// 结构类断言照常跑，只有「与已提交 glb 对齐」那几条会 SKIP。
+const ITEMS_PATH = P('examples/bilibili-demo.items.json');
+const hasRealItems = existsSync(ITEMS_PATH);
+const items = hasRealItems
+  ? JSON.parse(readFileSync(ITEMS_PATH, 'utf8'))
+  : mockItems(120, 'mock-v1');
+
+if (!hasRealItems) {
+  console.log('  注意：未找到 demo 的 items.json，退回 mock 数据 ——');
+  console.log('        结构断言照跑，与已提交 glb 对齐的几条会 SKIP。\n');
+}
 const { ir } = compile(world, items);
 const irIds = new Set(ir.regions.flatMap(r => r.exhibits.map(e => e.item)));
 
 console.log(`  glb ${frames.length} 个画框 · IR ${irIds.size} 件展品\n`);
 
 // 1. 一一对应
-check('glb 节点与 IR 展品一一对应', glbIds.size === irIds.size &&
-  [...glbIds].every(id => irIds.has(id)) && [...irIds].every(id => glbIds.has(id)),
-  `glb ${glbIds.size} / IR ${irIds.size}`);
+if (hasRealItems) {
+  check('glb 节点与 IR 展品一一对应', glbIds.size === irIds.size &&
+    [...glbIds].every(id => irIds.has(id)) && [...irIds].every(id => glbIds.has(id)),
+    `glb ${glbIds.size} / IR ${irIds.size}`);
+} else {
+  console.log('  SKIP  glb 与 IR 一一对应（需要 demo 的真实 items.json）');
+}
 
 // 2. glb 里不该有材质（封面运行时贴）
 check('glb 不含材质（封面由网页端贴）', (glb.materials || []).length === 0,
@@ -57,7 +74,7 @@ check('主画数量与展区数一致', heroes.length === ir.regions.length,
   `${heroes.length} 幅 / ${ir.regions.length} 区`);
 
 // 4. extras 里的 region 与 IR 一致
-const badRegion = frames.filter(n => {
+const badRegion = !hasRealItems ? [] : frames.filter(n => {
   const e = ir.regions.flatMap(r => r.exhibits.map(x => ({ ...x, rn: r.name }))).find(x => x.item === keyOf(n.name));
   return e && n.extras?.region !== e.rn;
 });

@@ -3,7 +3,7 @@
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
-import { parseWorld } from '../src/parse.mjs';
+import { parseWorld, quoteString } from '../src/parse.mjs';
 import { compile, diff } from '../src/compile.mjs';
 import { mockItems } from '../src/adapters/mock.mjs';
 
@@ -89,6 +89,23 @@ check('D4 空间 diff：能定位到具体展品和位移', dPin.moved[0]?.id ==
   const keysNew = new Set(shifted.slice(1).map(i => i.key));
   const same = keysOld.every(k => k && keysNew.has(k));
   check('A-03 素材身份不随数组位置漂移', same, `旧 ${keysOld.length} 条 / 命中 ${keysNew.size} 个`);
+}
+
+// A-07：字符串转义必须能原样往返（引号、反斜杠、换行）
+{
+  const nasty = '他说"你好" \\ 然后\n换行';
+  const w2 = parseWorld(`world ${quoteString(nasty)} {\n  seed 1\n}\n`);
+  check('A-07 字符串转义往返一致', w2.name === nasty, JSON.stringify(w2.name).slice(0, 40));
+}
+
+// A-07 补充：importer 生成的源码必须能被自己的解析器读回来
+{
+  const { buildWorldFromItems } = await import('../src/importer.mjs');
+  const tricky = [{ key: 'mock_x', title: '标题里有"引号"和\\反斜杠', year: 2024, owner: 'u', cover: 'mock://c' }];
+  const built = await buildWorldFromItems(tricky, { title: 't"t', source: 's\\s', seedKey: 'esc' });
+  let ok = true, msg = '';
+  try { parseWorld(built.world); } catch (e) { ok = false; msg = e.message.slice(0, 40); }
+  check('A-07 importer 产出的源码可被解析', ok, msg);
 }
 
 console.log('');

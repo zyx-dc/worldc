@@ -7,7 +7,7 @@ import { nameRegions } from './naming.mjs';
 const HUES = [210, 28, 285, 160, 340, 100];
 const COLS = 6;
 
-const esc = s => String(s).replace(/"/g, '\\"');
+import { quoteString as esc } from './parse.mjs';
 const ym = ts => (ts ? new Date(ts).toISOString().slice(0, 7) : '?');
 
 function chunk(list, n) {
@@ -72,9 +72,9 @@ export async function buildWorldFromItems(items, opt) {
     `# 源：${title}（${source}）`,
     `# ${items.length} 件 · ${ym(items[0].ts)} ~ ${ym(items[items.length - 1].ts)}`,
     '',
-    `world "${esc(title)}" {`,
+    `world ${esc(title)} {`,
     `  seed 0x${seed.toString(16)}`,
-    `  source "${esc(source)}"`,
+    `  source ${esc(source)}`,
     `  items ${items.length}`,
     '',
   ];
@@ -83,7 +83,7 @@ export async function buildWorldFromItems(items, opt) {
   for (const r of regions) {
     body.push(
       `  # ${r.name} · ${r.span} · ${r.count} 件`,
-      `  region "${esc(r.name)}" {`,
+      `  region ${esc(r.name)} {`,
       `    take ${r.take[0]}..${r.take[1]}`,
       `    hue ${r.hue}`,
       `    layout grid ${r.rows} ${r.cols}`,

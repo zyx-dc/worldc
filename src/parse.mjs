@@ -27,7 +27,16 @@ export function tokenize(src) {
     if (ch === '"') {
       let j = i + 1;
       let buf = '';
-      while (j < s.length && s[j] !== '"') { buf += s[j]; j++; }
+      while (j < s.length && s[j] !== '"') {
+        // 支持 \" \\ \n \r \t —— importer 会写出这些转义，词法器必须能读回来
+        if (s[j] === '\\' && j + 1 < s.length) {
+          const e = s[j + 1];
+          buf += e === 'n' ? '\n' : e === 't' ? '\t' : e === 'r' ? '\r' : e;
+          j += 2;
+          continue;
+        }
+        buf += s[j]; j++;
+      }
       if (j >= s.length) throw new Error(`第 ${lineOf(s, i)} 行：字符串没有闭合`);
       out.push({ t: T.STR, v: buf, line: lineOf(s, i) });
       i = j + 1;
@@ -252,6 +261,21 @@ class Parser {
 
     return { item, pos: [x, y, z], rot };
   }
+}
+
+/**
+ * 把任意字符串编码成 DSL 字符串字面量（含两侧引号）。
+ * 与 tokenize 里的解码是一对：importer 只能通过这里写字符串，
+ * 否则两边规则会再次分叉（这正是审计 A-07 指出的问题）。
+ */
+export function quoteString(s) {
+  const body = String(s)
+    .replace(/\\/g, '\\\\')
+    .replace(/"/g, '\\"')
+    .replace(/\n/g, '\\n')
+    .replace(/\r/g, '\\r')
+    .replace(/\t/g, '\\t');
+  return `"${body}"`;
 }
 
 export function parseWorld(src) {
