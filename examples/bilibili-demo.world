@@ -3,12 +3,12 @@
 #
 # place 行是「身份 → 格子」的永久记录：收藏夹更新时不要删它们，
 # 重新用 import --merge 追加，旧展品就会留在原地。
-# 源：泛式生贺合集（bilibili/fav/1172134631?mid=63231）
+# 源：泛式生贺合集（bilibili/fav/<fid>?mid=<mid>）
 # 120 件
 
 world "泛式生贺合集" {
   seed 0xccd9e9a5
-  source "bilibili/fav/1172134631?mid=63231"
+  source "bilibili/fav/<fid>?mid=<mid>"
   items 120
   layout 2
 
