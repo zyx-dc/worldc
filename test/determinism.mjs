@@ -6,6 +6,7 @@ import { dirname, join } from 'node:path';
 import { parseWorld, quoteString } from '../src/parse.mjs';
 import { compile, diff } from '../src/compile.mjs';
 import { mockItems } from '../src/adapters/mock.mjs';
+import { buildWorldFromItems, mergeWorld } from '../src/importer.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const root = join(here, '..');
@@ -115,6 +116,72 @@ check('D4 空间 diff：能定位到具体展品和位移', dPin.moved[0]?.id ==
   try { parseWorld('world "a" {\n  seed 1\n}\nregion "b" { }\n'); } catch (e) { e2 = e.message; }
   check('A-06 未闭合的块会报错', /没有闭合/.test(e1), e1.slice(0, 24));
   check('A-06 尾随内容会报错', /多余内容/.test(e2), e2.slice(0, 28));
+}
+
+// ── 布局 v2：收藏夹更新时不重排 ─────────────────────────────
+{
+  const ten = mockItems(10, 'stable');
+  const built = await buildWorldFromItems(ten, { title: '稳定测试', source: 'x', seedKey: 'fav1|稳定测试' });
+
+  // 故意把新条目插到最前面 —— 这是下标式布局最怕的情况
+  const fresh = mockItems(3, 'grow').map((it, i) => ({ ...it, key: `new_${i}`, ts: 1000 + i }));
+  const grown = [...fresh, ...ten];
+
+  const merged = await mergeWorld(parseWorld(built.world), ten, grown);
+
+  const A = compile(parseWorld(built.world), ten).ir;
+  const B = compile(parseWorld(merged.world), grown).ir;
+  const posA = new Map(A.regions.flatMap(r => r.exhibits.map(e => [e.item, e.pos.join(',')])));
+  const posB = new Map(B.regions.flatMap(r => r.exhibits.map(e => [e.item, e.pos.join(',')])));
+
+  const moved = [...posA].filter(([k, v]) => posB.get(k) !== v).length;
+  const d = diff(A, B);
+
+  check('v2 增量导入：旧展品一件都不动', moved === 0, `${posA.size} 件 · 位移 ${moved}`);
+  check('v2 增量导入：diff 只报 added',
+    d.moved.length === 0 && d.rotated.length === 0 && d.added.length === 3,
+    `moved ${d.moved.length} · rotated ${d.rotated.length} · added ${d.added.length}`);
+  check('v2 源码声明算法版本', parseWorld(built.world).layoutVersion === 2,
+    `layout ${parseWorld(built.world).layoutVersion} · irVersion ${A.irVersion}`);
+}
+
+// 同样两块状态，分两次导入与一次导入必须得到同一份源码
+{
+  const first = mockItems(8, 'batch-a');
+  const built = await buildWorldFromItems(first, { title: '分批', source: 'x', seedKey: 'fav2|分批' });
+  const more = mockItems(4, 'batch-b').map((it, i) => ({ ...it, key: `b_${i}`, ts: 5000 + i }));
+
+  // 一次导入 12 条
+  const all = await buildWorldFromItems([...first, ...more], { title: '分批', source: 'x', seedKey: 'fav2|分批' });
+  // 先 8 条，再合并 4 条
+  const step = await mergeWorld(parseWorld(built.world), first, [...first, ...more]);
+
+  const hashAll = compile(parseWorld(all.world), [...first, ...more]).hash;
+  const hashStep = compile(parseWorld(step.world), [...first, ...more]).hash;
+  check('v2 分批导入与一次导入等价', hashAll === hashStep, `${hashAll.slice(0, 8)} vs ${hashStep.slice(0, 8)}`);
+}
+
+// v2 的三种错法都必须报错，而不是悄悄挪走别人
+{
+  const items = mockItems(5, 'edge');
+  const src = body => `world "边界" {\n  seed 1\n  layout 2\n  region "r" {\n    layout grid 2 3\n${body}  }\n}\n`;
+  let e1 = '', e2 = '', e3 = '';
+  try { compile(parseWorld(src('    place "nope" 0 0\n')), items); } catch (e) { e1 = e.message; }
+  try { compile(parseWorld(src('    place "mock_0" 0 0\n    place "mock_1" 0 0\n')), items); } catch (e) { e2 = e.message; }
+  try { compile(parseWorld(src('    place "mock_0" 9 9\n')), items); } catch (e) { e3 = e.message; }
+
+  check('v2 place 引用不存在的展品 → 报错', /不存在的展品/.test(e1), e1.slice(0, 20));
+  check('v2 两件抢同一格 → 报错', /都落在格子/.test(e2), e2.slice(0, 20));
+  check('v2 place 超出 grid → 报错', /超出 grid/.test(e3), e3.slice(0, 20));
+}
+
+// v1 冻结：没有 layout 指令的旧文件，IR 结构一字不改
+{
+  const v1 = 'world "旧世界" {\n  seed 7\n  region "r" {\n    take 0..2\n    layout grid 2 3\n  }\n}\n';
+  const ir = compile(parseWorld(v1), mockItems(5, 'v1')).ir;
+  check('v1 旧文件不受 v2 影响',
+    parseWorld(v1).layoutVersion === 1 && ir.irVersion === 1 && !('layoutVersion' in ir),
+    `irVersion ${ir.irVersion} · 无 layoutVersion 字段`);
 }
 
 console.log('');

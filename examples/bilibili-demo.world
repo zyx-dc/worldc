@@ -1,39 +1,159 @@
 # 由 worldc import 生成 —— 这是一份源码，不是场景。
 # 想改世界就改这个文件，然后重新 build。改一行不会动到别的展品。
+#
+# place 行是「身份 → 格子」的永久记录：收藏夹更新时不要删它们，
+# 重新用 import --merge 追加，旧展品就会留在原地。
 # 源：泛式生贺合集（bilibili/fav/1172134631?mid=63231）
-# 120 件 · 2024-01 ~ 2026-02
+# 120 件
 
 world "泛式生贺合集" {
   seed 0xccd9e9a5
   source "bilibili/fav/1172134631?mid=63231"
   items 120
+  layout 2
 
-  # 泛式生贺 · 2024-01 ~ 2024-02 · 30 件
+  # 泛式生贺 · 2024 ~ 2024 · 30 件
   region "泛式生贺" {
-    take 0..29
     hue 210
     layout grid 5 6
+    place "bv_BV1bc41147oe" 0 0
+    place "bv_BV1aZ421z7nd" 0 1
+    place "bv_BV1t7421K7pL" 0 2
+    place "bv_BV1o4421A7cX" 0 3
+    place "bv_BV15Z421U7Ah" 0 4
+    place "bv_BV1uZ421U7ar" 0 5
+    place "bv_BV1px4y1f7Va" 1 0
+    place "bv_BV1rv421C7bR" 1 1
+    place "bv_BV1tm411Q79j" 1 2
+    place "bv_BV16642137c5" 1 3
+    place "bv_BV15H4y1Y7t7" 1 4
+    place "bv_BV19y42187mc" 1 5
+    place "bv_BV1KA4m157RA" 2 0
+    place "bv_BV1yv421C7is" 2 1
+    place "bv_BV1qF4m1T7x8" 2 2
+    place "bv_BV156421u7j2" 2 3
+    place "bv_BV1xm411Q77r" 2 4
+    place "bv_BV1wp421o74e" 2 5
+    place "bv_BV1X7421K7k3" 3 0
+    place "bv_BV14m411X7wv" 3 1
+    place "bv_BV1Q642137Kc" 3 2
+    place "bv_BV1x2421c7Ro" 3 3
+    place "bv_BV19Z421z7EG" 3 4
+    place "bv_BV1C642137e7" 3 5
+    place "bv_BV11v421C78Y" 4 0
+    place "bv_BV1zC411z7ow" 4 1
+    place "bv_BV1vF4m1u7pL" 4 2
+    place "bv_BV1PU421o7P9" 4 3
+    place "bv_BV1ep421o7us" 4 4
+    place "bv_BV1UB421z7CH" 4 5
   }
 
-  # 呜哇 · 2024-02 ~ 2025-02 · 30 件
+  # 呜哇 · 2024 ~ 2025 · 30 件
   region "呜哇" {
-    take 30..59
     hue 28
     layout grid 5 6
+    place "bv_BV1kx4y117ZA" 0 0
+    place "bv_BV12C411z71h" 0 1
+    place "bv_BV1rT421a7ZP" 0 2
+    place "bv_BV1wXSrYpEcL" 0 3
+    place "bv_BV1NpPQe9EQU" 0 4
+    place "bv_BV1AkN3ekE4D" 0 5
+    place "bv_BV1xRNyekEiP" 1 0
+    place "bv_BV1eCN2eZEKr" 1 1
+    place "bv_BV1oxP1e4Equ" 1 2
+    place "bv_BV1G2N2edEV8" 1 3
+    place "bv_BV1xnNUeHEDz" 1 4
+    place "bv_BV1ssNUeUEzq" 1 5
+    place "bv_BV1mpNDeZECY" 2 0
+    place "bv_BV1vMNDeMET3" 2 1
+    place "bv_BV1a9PkerEkK" 2 2
+    place "bv_BV11RN9eYENi" 2 3
+    place "bv_BV1ymNSeQER3" 2 4
+    place "bv_BV1d8N9eSESW" 2 5
+    place "bv_BV1kZN9ehEZs" 3 0
+    place "bv_BV1DeNSehE1V" 3 1
+    place "bv_BV1vRNXeyEwf" 3 2
+    place "bv_BV1gPN9eBE7y" 3 3
+    place "bv_BV1bsNXeNEGc" 3 4
+    place "bv_BV1k9NSemEAV" 3 5
+    place "bv_BV1gAN9euENu" 4 0
+    place "bv_BV1GoNXeVEeU" 4 1
+    place "bv_BV11dNde6E9A" 4 2
+    place "bv_BV1mRNde3Eat" 4 3
+    place "bv_BV1VRNXeyEDv" 4 4
+    place "bv_BV1ApNdePEVp" 4 5
   }
 
-  # live2d · 2025-02 ~ 2026-02 · 30 件
+  # live2d · 2025 ~ 2026 · 30 件
   region "live2d" {
-    take 60..89
     hue 285
     layout grid 5 6
+    place "bv_BV1z8NdebEcP" 0 0
+    place "bv_BV1HkNRehEnt" 0 1
+    place "bv_BV1M3NderErm" 0 2
+    place "bv_BV1JiNZeAEev" 0 3
+    place "bv_BV1P4NZeuEn7" 0 4
+    place "bv_BV1joNoefEC9" 0 5
+    place "bv_BV1JXNoeaEzX" 1 0
+    place "bv_BV14iNoeVEso" 1 1
+    place "bv_BV16SNoeeEsW" 1 2
+    place "bv_BV1q7NoexEGt" 1 3
+    place "bv_BV1a7KseFEh4" 1 4
+    place "bv_BV18qetzhEJ4" 1 5
+    place "bv_BV1aeeEzrEKN" 2 0
+    place "bv_BV14TY5zDEiQ" 2 1
+    place "bv_BV1QXrHBDEmS" 2 2
+    place "bv_BV1e7rUB8EGk" 2 3
+    place "bv_BV1xqkpByEYv" 2 4
+    place "bv_BV165zMBpEPz" 2 5
+    place "bv_BV1zPfdBPEj9" 3 0
+    place "bv_BV1PLfoB1Eau" 3 1
+    place "bv_BV1tAF7z5EEV" 3 2
+    place "bv_BV1QqFbzSE7N" 3 3
+    place "bv_BV1DhFfzKE1f" 3 4
+    place "bv_BV1gocFzMEFc" 3 5
+    place "bv_BV1YKcFzGEZE" 4 0
+    place "bv_BV16RccztEZy" 4 1
+    place "bv_BV1deffBgET9" 4 2
+    place "bv_BV1sqcKzLEzM" 4 3
+    place "bv_BV1VKcuzPEuL" 4 4
+    place "bv_BV1QDcuzAE1r" 4 5
   }
 
-  # mad · 2026-02 ~ 2026-02 · 30 件
+  # mad · 2026 ~ 2026 · 30 件
   region "mad" {
-    take 90..119
     hue 160
     layout grid 5 6
+    place "bv_BV17RFezCEXd" 0 0
+    place "bv_BV14bFTz2Exo" 0 1
+    place "bv_BV1BGcMzgEjp" 0 2
+    place "bv_BV1CJFyz7EjE" 0 3
+    place "bv_BV1C4F2znEzh" 0 4
+    place "bv_BV1WCF1zDEsa" 0 5
+    place "bv_BV1kPF1z7E4E" 1 0
+    place "bv_BV16qFUzHE44" 1 1
+    place "bv_BV1boFZz8EUH" 1 2
+    place "bv_BV1dRFCzeEtF" 1 3
+    place "bv_BV1vJF1zTEnc" 1 4
+    place "bv_BV163FmznESS" 1 5
+    place "bv_BV1c2F1zUEo3" 2 0
+    place "bv_BV1pKFmz9EyH" 2 1
+    place "bv_BV1HgFSzfEUh" 2 2
+    place "bv_BV15bFSz2Eo5" 2 3
+    place "bv_BV1oCFUz7EFR" 2 4
+    place "bv_BV1qCFUz7E6b" 2 5
+    place "bv_BV1G9FUzrEYS" 3 0
+    place "bv_BV1bwFSzNEcF" 3 1
+    place "bv_BV1DkFQz1EW5" 3 2
+    place "bv_BV13BFQzEEiL" 3 3
+    place "bv_BV1EHFQzFEeu" 3 4
+    place "bv_BV1kLFQzPEZE" 3 5
+    place "bv_BV1XQFDzSEzM" 4 0
+    place "bv_BV1xTFQzzEUq" 4 1
+    place "bv_BV1PeFDzAEJ1" 4 2
+    place "bv_BV1vYF9z8EEn" 4 3
+    place "bv_BV1rXchz3EKU" 4 4
+    place "bv_BV1MNcqzBEm1" 4 5
   }
 
 }

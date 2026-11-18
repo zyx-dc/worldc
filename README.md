@@ -19,7 +19,7 @@ node src/cli.mjs plan  examples/bilibili-demo.world --out build/plan.svg
 node serve.mjs      # 然后打开 http://localhost:5173/
 
 # 其它
-node test/determinism.mjs                                    # 验证 7 条架构承诺
+node test/determinism.mjs                                    # 22 条断言
 node src/cli.mjs diff examples/my-favorites.world examples/my-favorites.tidied.world
 ```
 
@@ -46,15 +46,15 @@ node src/cli.mjs diff examples/my-favorites.world examples/my-favorites.tidied.w
 ### 编辑模式能做什么
 
 - 改 `.world` 文本 → 右边立刻重建（语法错了会在状态栏报错，不会崩）
-- **直接在 3D 里拖动展板** → 源码里自动写回一条 `pin item:N at x 0 z rot r` → 重新编译
+- **直接在 3D 里拖动展板** → 源码里自动写回一条 `pin item:"bv_xxx" at x 0 z rot r` → 重新编译
 
 实测一次完整的回路（CDP 驱动真实页面）：
 
 ```
-改动前  39 行 · 0 条 pin · 5 号展品在 [8.349, 0, -6.731]
-拖动后  40 行 · 1 条 pin · pin item:5 at 3.5 0 -2 rot 42
-        5 号展品实际位置 → [3.5, 0, -2] · pinned=true · hash 9e7a959f48d7
-改文本  hue 210→120 / 285→320 → IR 真的变了 · hash 43bd73c866d1 · 120 件
+改动前  159 行 · 0 条 pin · 5 号展品在 [4.96, 1.44, -15.48]
+挪动后  160 行 · 1 条 pin · pin item:"bv_BV15Z421U7Ah" at 3.5 0 -2 rot 42
+        5 号展品实际位置 → [3.5, 0, -2] · pinned=true
+改文本  hue 210→120 / 285→320 → IR 真的变了 · 120 件
 ```
 
 这能成立是因为编译器是**同构的**：`src/hash.mjs` 用纯 JS 实现了 sha256，
@@ -63,6 +63,45 @@ Node 和浏览器算出完全一样的 hash（已经和 `node:crypto` 逐位比�
 
 > B站封面图没有 CORS 头，viewer 通过 `serve.mjs` 的 `/img?u=` 代理加载，并落盘到
 > `cache/covers/`（约 27MB / 118 张）。**缓存下来之后断网也能打开** —— 这正是 V4 离线版的地基。
+
+## 收藏夹会更新
+
+真实收藏夹是会长大的。所以位置不能是「编译时按下标算出来的」——
+那样中间插一条，它后面的每一件都会跟着平移。
+
+`.world` 顶部的 `layout 2` 声明算法版本，区域里的 `place` 行把
+「身份 → 格子」写成**数据**：
+
+```world
+  layout 2
+  region "泛式生贺" {
+    hue 210
+    layout grid 5 6
+    place "bv_BV1bc41147oe" 0 0
+    place "bv_BV1aZ421z7nd" 0 1
+  }
+```
+
+收藏夹涨了，重新导入时加 `--merge`：
+
+```bash
+node src/cli.mjs import "https://space.bilibili.com/<mid>/favlist?fid=<fid>" \
+  --merge --out examples/my-favorites.world
+```
+
+它读旧源码、保留每一条已有 `place`，只给新条目找空格。
+实测（真实收藏夹 +3 条，其中一条是 2019 年的老视频、被故意插在数组最前面）：
+
+```
+items   123  ·  原地 120 / 新增 3 / 移除 0
+diff    moved 0 · rotated 0 · region 0 · gone 0 · added 3
+```
+
+**旧展品位移 0.000 m。** 取消收藏的条目会从源码里移除并单独报数，不会静默消失。
+
+> `layout` 缺省是 1：早期文件没有 place 行，仍按「序号落格」编译，结果一字不改。
+> 迁到 v2 只需要跑一次 `--merge` —— 它认得 v1 的 `take` 区间，能一比一还原每一格。
+> 本仓库的 demo 就是这么迁的，120 件位移 0.000 m、转角 0.0°。
 
 ## 目录
 
@@ -92,9 +131,9 @@ test/determinism.mjs     架构承诺的可执行验证
 ## 实测
 
 ```
-真实收藏夹 192 件 → 取 120 件 → 39 行 / 0.8 KB 源码
+真实收藏夹 192 件 → 取 120 件 → 158 行 / 4.6 KB 源码
   → 4 个自动命名的展区（泛式生贺 / 呜哇 / live2d / mad）
-  → 30.4 KB 场景图（含封面 URL）→ 编译 4.6 ms
+  → 32.1 KB 场景图（含封面 URL）
 同一份 IR → 3D 漫游（three.js）+ 2D 导览图（SVG），数据一行不改
 ```
 

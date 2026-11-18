@@ -153,6 +153,8 @@ class Parser {
       seed: null,
       source: null,
       items: null,
+      // 布局算法版本。没写就是 v1 —— 旧文件按旧算法编译，永不被新算法悄悄改掉。
+      layoutVersion: 1,
       regions: [],
       pins: [],
     };
@@ -174,6 +176,9 @@ class Parser {
           break;
         case 'items':
           world.items = this.expectNum();
+          break;
+        case 'layout':
+          world.layoutVersion = this.expectNum();
           break;
         case 'region':
           world.regions.push(this.parseRegion());
@@ -208,6 +213,9 @@ class Parser {
       hue: 200,
       layout: { type: 'grid', rows: 4, cols: 4 },
       capacity: 16,
+      // v2：显式格位。一条 place 把某个身份钉在 (row, col) 上，
+      // 这是「收藏夹更新时旧展品不动」的全部秘密 —— 位置是数据，不是每次重算。
+      places: [],
     };
 
     let closed = false;
@@ -231,6 +239,12 @@ class Parser {
         region.take = [a, b];
       } else if (kw.v === 'hue') {
         region.hue = this.expectNum();
+      } else if (kw.v === 'place') {
+        // place "bv_xxx" 3 2 —— 身份 + 行列。字符串形式为主，数字为兼容旧数据。
+        const item = this.peek().t === T.STR ? this.expectStr() : String(this.expectNum());
+        const row = this.expectNum();
+        const col = this.expectNum();
+        region.places.push({ item, row, col });
       } else if (kw.v === 'layout') {
         const kind = this.acceptIdent();
         if (!kind) throw new Error(`第 ${kw.line} 行：layout 后面要跟布局类型`);

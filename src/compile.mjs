@@ -5,7 +5,7 @@
 //   3. 覆盖层（pin）在推导之后应用，不影响其它展品
 
 import { sha256Hex, byteLength } from './hash.mjs';
-import { layoutRegion, regionBounds } from './layout.mjs';
+import { layoutRegion, layoutRegionV2, regionBounds, keyOf } from './layout.mjs';
 import { hash32 } from './rng.mjs';
 
 /** 键序稳定的序列化：保证同样的对象永远产出同样的字符串 */
@@ -35,20 +35,47 @@ export function compile(world, items) {
   const placed = new Set();
   let overflow = 0;
 
+  const algo = Number(world.layoutVersion ?? 1);
+  const byKey = new Map(items.map(it => [keyOf(it), it]));
+
   for (const region of world.regions) {
-    // 两种选区方式：按年份区间（span），或按序号区间（take）。
-    // take 给 import 用：精确、不重叠，天然按时间排序。
-    const inSpan = region.take
-      ? items.slice(region.take[0], region.take[1] + 1)
-      : items.filter(it => it.year >= region.span[0] && it.year <= region.span[1]);
+    let members;
+    let exhibits;
 
-    const cap = region.layout.rows * region.layout.cols;
-    if (inSpan.length > cap) overflow += inSpan.length - cap;
+    if (algo >= 2 && (region.places || []).length) {
+      // ── v2：成员与格位都由 place 行决定 ──────────────────
+      // 这就是「收藏夹更新、旧展品不动」的全部原因：谁在这个区、
+      // 站在第几格，都写在源码里，不依赖数组下标。
+      const entries = region.places.map(p => {
+        const it = byKey.get(p.item);
+        if (!it) {
+          throw new Error(
+            `区域「${region.name}」的 place 引用了不存在的展品 "${p.item}" —— ` +
+            `收藏夹里已经没有它了。删掉这一行，或把 items.json 换回旧快照。`,
+          );
+        }
+        return { key: p.item, item: it, row: p.row, col: p.col };
+      });
+      members = entries.map(e => e.item);
+      exhibits = layoutRegionV2(region, entries, world.seed);
+    } else {
+      // ── v1（以及没写 place 的 v2 区域）：按序号 / 年份选区 ──
+      // 两种选区方式：按年份区间（span），或按序号区间（take）。
+      // take 给 import 用：精确、不重叠，天然按时间排序。
+      const inSpan = region.take
+        ? items.slice(region.take[0], region.take[1] + 1)
+        : items.filter(it => it.year >= region.span[0] && it.year <= region.span[1]);
 
-    const exhibits = layoutRegion(region, inSpan, world.seed);
+      const cap = region.layout.rows * region.layout.cols;
+      if (inSpan.length > cap) overflow += inSpan.length - cap;
+
+      members = inSpan;
+      exhibits = layoutRegion(region, inSpan, world.seed);
+    }
+
     for (const ex of exhibits) placed.add(ex.item);
 
-    const yrs = inSpan.map(it => it.year).filter(Boolean);
+    const yrs = members.map(it => it.year).filter(Boolean);
     const years = yrs.length ? [Math.min(...yrs), Math.max(...yrs)] : region.span;
 
     regions.push({
@@ -76,16 +103,21 @@ export function compile(world, items) {
   }
 
   const ir = {
-    irVersion: 1,
+    irVersion: algo >= 2 ? 2 : 1,
     world: world.name,
     seed: world.seed,
     source: world.source,
     regions,
   };
+  // 只在 v2 里带这个字段：v1 世界的 hash 必须一字不变
+  if (algo >= 2) ir.layoutVersion = algo;
 
   const stats = {
+    layout: algo,
     items: items.length,
     placed: placed.size,
+    // 收藏夹里有、但源码还没给它 place 的件数。合并导入之后应该为 0。
+    unplaced: items.length - placed.size,
     overflow,
     regions: regions.length,
     pinned: pinnedIds.size,
