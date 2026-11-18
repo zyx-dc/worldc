@@ -460,6 +460,18 @@ function moveHalos(p) {
   for (const h of p.halos) h.position.copy(p.mesh.position).addScaledVector(normal, -0.3);
 }
 
+/**
+ * 指针捕获必须包起来。
+ * 某些浏览器对「非活动指针」的 pointerId 会抛 InvalidStateError（Safari 尤其），
+ * 而这个异常会冒到 window.onerror，被当成「渲染失败」——
+ * 实际上画面好好的，只是拖拽开始不了。
+ */
+function capturePointer(e) {
+  try {
+    renderer.domElement.setPointerCapture(e.pointerId);
+  } catch { /* 捕获失败就退化成不捕获，拖拽照旧能用 */ }
+}
+
 renderer.domElement.addEventListener('pointerdown', (e) => {
   if (EDIT) {
     setNdc(e);
@@ -471,13 +483,13 @@ renderer.domElement.addEventListener('pointerdown', (e) => {
         // 在画框所在水平面上拖，不是 y=0 —— 画框挂得高，落点才不会飘
         dragPlane.setFromNormalAndCoplanarPoint(UP, dragPanel.mesh.position);
         dragPanel.mesh.userData.dirty = false;
-        renderer.domElement.setPointerCapture(e.pointerId);
+        capturePointer(e);
         return;
       }
     }
   }
   dragging = true; lastX = e.clientX; lastY = e.clientY;
-  renderer.domElement.setPointerCapture(e.pointerId);
+  capturePointer(e);
 });
 
 renderer.domElement.addEventListener('pointerup', (e) => {

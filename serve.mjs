@@ -111,9 +111,16 @@ createServer(async (req, res) => {
       return;
     }
 
-    // 根路径必须真的跳到 /viewer/，否则浏览器 base URL 是 /，
+    // 根路径默认进星海 —— 那是旗舰体验，也是这个项目最想让人先看到的东西。
+    // 走廊后端还在，地址是 /viewer/。
+    if (p0 === '/') {
+      res.writeHead(302, { Location: '/viewer/space.html' }).end();
+      return;
+    }
+
+    // 目录跳转必须真的跳到 /viewer/，否则浏览器 base URL 是 /，
     // 页面里的 ./main.js 会解析成 /main.js 而 404（模块加载失败是静默的）。
-    if (p0 === '/' || p0 === '/viewer') {
+    if (p0 === '/viewer') {
       res.writeHead(302, { Location: '/viewer/' }).end();
       return;
     }

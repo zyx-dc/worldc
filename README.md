@@ -15,7 +15,8 @@ node src/cli.mjs build examples/offline-demo.world --out build/scene.json
 node src/cli.mjs plan  examples/offline-demo.world --out build/plan.svg
 
 # 2. 走进去
-node serve.mjs      # 然后打开 http://localhost:5173/
+node serve.mjs      # 打开 http://localhost:5173/ → 直接就是星海
+                    #   走廊后端在 http://localhost:5173/viewer/
 ```
 
 换成你自己的收藏夹（这一步要联网）：
