@@ -652,16 +652,44 @@ const pvEl = $('pv');
 
 let nearPanel = null;
 let playing = null;
-let boosted = null;
 let hoverT = 0;
 const _corner = new THREE.Vector3();
 
-/** t: 0=正常，1=完全点亮 */
-function applyHover(p, t) {
-  for (let i = 0; i < p.halos.length; i++) {
-    p.halos[i].material.opacity = p.haloBase[i] * (1 + 0.9 * t);
+const _glowN = new THREE.Vector3();
+const _glowQ = new THREE.Quaternion();
+const _glowV = new THREE.Vector3();
+
+function smoothstep(a, b, x) {
+  const t = Math.max(0, Math.min(1, (x - a) / (b - a)));
+  return t * t * (3 - 2 * t);
+}
+
+/**
+ * 光晕和光边必须随「距离」和「朝向」衰减。
+ * 不衰减会有两个很显眼的 bug：
+ *   1. 贴到画框前：sprite 永远正对相机，尺寸又是世界坐标固定的，
+ *      于是铺满整屏，变成一圈占满视野的巨大椭圆环；
+ *   2. 侧对画框：画框几乎不可见，光晕却还在，看着像凭空浮着一个环。
+ */
+function updateGlow() {
+  for (const p of panels) {
+    const d = p.mesh.position.distanceTo(camera.position);
+    let fade = smoothstep(2.5, 9, d);          // 2.5m 内关掉，9m 外恢复
+
+    if (fade > 0) {
+      _glowN.copy(PLANE_FRONT).applyQuaternion(p.mesh.getWorldQuaternion(_glowQ));
+      _glowV.copy(camera.position).sub(p.mesh.position).normalize();
+      // 法线与视线接近垂直 = 正侧着看，画框本身都看不见了，光晕不该还亮着
+      fade *= smoothstep(0.10, 0.45, Math.abs(_glowN.dot(_glowV)));
+    }
+
+    p.fade = fade;
+    const near = p === nearPanel;
+    for (let i = 0; i < p.halos.length; i++) {
+      p.halos[i].material.opacity = p.haloBase[i] * fade * (near ? 1 + 0.9 * hoverT : 1);
+    }
+    if (p.rim) p.rim.material.opacity = p.rimBase * fade * (near ? 1 + 0.6 * hoverT : 1);
   }
-  if (p.rim) p.rim.material.opacity = p.rimBase * (1 + 0.6 * t);
 }
 
 
@@ -797,12 +825,7 @@ function updateNear() {
   if (playing) cardEl.classList.remove('on');
 
   // 靠近的反馈：让那块画框自己亮起来（辉光与光边同时提亮），离开时慢慢还回去
-  if (nearPanel !== boosted) {
-    if (boosted) applyHover(boosted, 0);
-    boosted = nearPanel;
-  }
   hoverT += ((nearPanel ? 1 : 0) - hoverT) * 0.12;
-  if (boosted) applyHover(boosted, hoverT);
 
   if (playing) {
     if (bestD > PLAY_FAR) { closePlayer(); return; }
@@ -848,6 +871,7 @@ function tick() {
 
   if ((hudFrame++ & 7) === 0) updateHud();
   updateNear();
+  updateGlow();
   renderer.render(scene, camera);
   requestAnimationFrame(tick);
 }
