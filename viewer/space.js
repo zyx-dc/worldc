@@ -650,20 +650,6 @@ function applyHover(p, t) {
   if (p.rim) p.rim.material.opacity = p.rimBase * (1 + 0.6 * t);
 }
 
-/** 把画框的四个角投到屏幕上，得到它占的屏幕矩形 */
-function screenRect(mesh) {
-  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
-  for (const [x, z] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) {
-    _corner.set(x, 0, z).applyMatrix4(mesh.matrixWorld).project(camera);
-    const sx = (_corner.x * 0.5 + 0.5) * innerWidth;
-    const sy = (-_corner.y * 0.5 + 0.5) * innerHeight;
-    if (sx < minX) minX = sx;
-    if (sx > maxX) maxX = sx;
-    if (sy < minY) minY = sy;
-    if (sy > maxY) maxY = sy;
-  }
-  return { x: minX, y: minY, w: maxX - minX, h: maxY - minY };
-}
 
 function openPlayer(p) {
   const bvid = bvidById.get(p.id);
@@ -680,6 +666,96 @@ function closePlayer() {
 }
 
 $('pclose')?.addEventListener('click', closePlayer);
+
+const PLAYER_W = 960;
+const PLAYER_H = 540;
+
+// ── 单应变换：把矩形透视映射到任意四边形（CSS matrix3d） ──────
+// 这样播放器是真贴在画框那个平面上：会随视角产生透视，
+// 而不是一块永远正对屏幕、跟着视线走的浮层。
+function _adj(m) {
+  return [
+    m[4] * m[8] - m[5] * m[7], m[2] * m[7] - m[1] * m[8], m[1] * m[5] - m[2] * m[4],
+    m[5] * m[6] - m[3] * m[8], m[0] * m[8] - m[2] * m[6], m[2] * m[3] - m[0] * m[5],
+    m[3] * m[7] - m[4] * m[6], m[1] * m[6] - m[0] * m[7], m[0] * m[4] - m[1] * m[3],
+  ];
+}
+function _mm(a, b) {
+  const c = [];
+  for (let i = 0; i < 3; i++) {
+    for (let j = 0; j < 3; j++) {
+      let s = 0;
+      for (let k = 0; k < 3; k++) s += a[i * 3 + k] * b[k * 3 + j];
+      c[i * 3 + j] = s;
+    }
+  }
+  return c;
+}
+function _mv(m, v) {
+  return [
+    m[0] * v[0] + m[1] * v[1] + m[2] * v[2],
+    m[3] * v[0] + m[4] * v[1] + m[5] * v[2],
+    m[6] * v[0] + m[7] * v[1] + m[8] * v[2],
+  ];
+}
+function _basis(x1, y1, x2, y2, x3, y3, x4, y4) {
+  const m = [x1, x2, x3, y1, y2, y3, 1, 1, 1];
+  const v = _mv(_adj(m), [x4, y4, 1]);
+  return _mm(m, [v[0], 0, 0, 0, v[1], 0, 0, 0, v[2]]);
+}
+function homography(s, d) {
+  return _mm(
+    _basis(d[0][0], d[0][1], d[1][0], d[1][1], d[2][0], d[2][1], d[3][0], d[3][1]),
+    _adj(_basis(s[0][0], s[0][1], s[1][0], s[1][1], s[2][0], s[2][1], s[3][0], s[3][1]))
+  );
+}
+
+const _wpos = new THREE.Vector3();
+const _proj = new THREE.Vector3();
+
+/** 把播放器贴到画框平面上；看到背面或完全出屏就藏起来 */
+function layoutPlayer() {
+  if (!playing) return;
+  const mesh = playing.mesh;
+
+  normal.copy(PLANE_FRONT).applyQuaternion(mesh.getWorldQuaternion(tmpQ));
+  _wpos.copy(camera.position).sub(mesh.position);
+  if (normal.dot(_wpos) <= 0.05) { playerEl.style.display = 'none'; return; }   // 背面
+
+  const pts = [];
+  for (const [x, z] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) {
+    _proj.set(x, 0, z).applyMatrix4(mesh.matrixWorld).project(camera);
+    pts.push([(_proj.x * 0.5 + 0.5) * innerWidth, (-_proj.y * 0.5 + 0.5) * innerHeight]);
+  }
+
+  // 按屏幕位置定角点顺序，对镜像/翻转都稳
+  const pick = (f, max) => pts.reduce((a, b) => ((max ? f(b) > f(a) : f(b) < f(a)) ? b : a));
+  const TL = pick(p => p[0] + p[1], false);
+  const BR = pick(p => p[0] + p[1], true);
+  const TR = pick(p => p[0] - p[1], true);
+  const BL = pick(p => p[0] - p[1], false);
+
+  // 完全出屏就藏 —— 不再夹进视口，否则就变成跟着视线走
+  const xs = pts.map(p => p[0]);
+  const ys = pts.map(p => p[1]);
+  if (Math.max(...xs) < 0 || Math.min(...xs) > innerWidth ||
+      Math.max(...ys) < 0 || Math.min(...ys) > innerHeight) {
+    playerEl.style.display = 'none';
+    return;
+  }
+  playerEl.style.display = '';
+
+  const S = [[0, 0], [PLAYER_W, 0], [0, PLAYER_H], [PLAYER_W, PLAYER_H]];
+  const H = homography(S, [TL, TR, BL, BR]);
+  const k = 1 / H[8];
+  const m = [
+    H[0] * k, H[3] * k, 0, H[6] * k,
+    H[1] * k, H[4] * k, 0, H[7] * k,
+    0, 0, 1, 0,
+    H[2] * k, H[5] * k, 0, H[8] * k,
+  ];
+  playerEl.style.transform = `matrix3d(${m.map(v => +v.toFixed(8)).join(',')})`;
+}
 
 function updateNear() {
   let best = null, bestD = Infinity;
@@ -716,20 +792,7 @@ function updateNear() {
 
   if (playing) {
     if (bestD > PLAY_FAR) { closePlayer(); return; }
-    const r = screenRect(playing.mesh);
-    // 画框贴得很近时，投影矩形会比屏幕还大；夹进视口并保持与画框同心
-    const maxW = innerWidth * 0.86;
-    const maxH = innerHeight * 0.86;
-    const w = Math.min(Math.max(160, r.w), maxW);
-    const h = Math.min(Math.max(90, r.h), maxH);
-    let x = r.x + (r.w - w) / 2;
-    let y = r.y + (r.h - h) / 2;
-    x = Math.max(10, Math.min(innerWidth - w - 10, x));
-    y = Math.max(10, Math.min(innerHeight - h - 10, y));
-    playerEl.style.left = x + 'px';
-    playerEl.style.top = y + 'px';
-    playerEl.style.width = w + 'px';
-    playerEl.style.height = h + 'px';
+    layoutPlayer();
   }
 }
 
