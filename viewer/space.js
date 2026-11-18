@@ -235,6 +235,9 @@ gltf.scene.traverse((o) => {
     center: center.clone(),
     region: info.region,
     halos,
+    rim,
+    rimBase: hero ? 0.85 : 0.5,
+    haloBase: halos.map(h => h.material.opacity),
     basePos: mesh.position.clone(),
     baseQuat: mesh.quaternion.clone(),
     yaw: 0,
@@ -635,7 +638,17 @@ const pvEl = $('pv');
 
 let nearPanel = null;
 let playing = null;
+let boosted = null;
+let hoverT = 0;
 const _corner = new THREE.Vector3();
+
+/** t: 0=正常，1=完全点亮 */
+function applyHover(p, t) {
+  for (let i = 0; i < p.halos.length; i++) {
+    p.halos[i].material.opacity = p.haloBase[i] * (1 + 0.9 * t);
+  }
+  if (p.rim) p.rim.material.opacity = p.rimBase * (1 + 0.6 * t);
+}
 
 /** 把画框的四个角投到屏幕上，得到它占的屏幕矩形 */
 function screenRect(mesh) {
@@ -692,6 +705,14 @@ function updateNear() {
   }
   // 播放时把信息卡收掉，别压在播放器下面
   if (playing) cardEl.classList.remove('on');
+
+  // 靠近的反馈：让那块画框自己亮起来（辉光与光边同时提亮），离开时慢慢还回去
+  if (nearPanel !== boosted) {
+    if (boosted) applyHover(boosted, 0);
+    boosted = nearPanel;
+  }
+  hoverT += ((nearPanel ? 1 : 0) - hoverT) * 0.12;
+  if (boosted) applyHover(boosted, hoverT);
 
   if (playing) {
     if (bestD > PLAY_FAR) { closePlayer(); return; }
@@ -781,6 +802,10 @@ tick();
 window.space = {
   scene, camera, renderer, panels, gltf,
   recompile, applyPins, upsertPin,
+  openPlayer, closePlayer,
+  get nearPanel() { return nearPanel; },
+  get playing() { return playing; },
+  get bvidCount() { return bvidById.size; },
   get src() { return srcText; },
   set src(v) { srcText = v; if (ta) ta.value = v; recompile(); },
   editor: ta,
