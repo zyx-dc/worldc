@@ -12,3 +12,6 @@ build/
 .DS_Store
 Thumbs.db
 *.log
+
+# 建场脚本顺带写出的布局表（生成物，不入库）
+viewer/assets/space-layout.json
