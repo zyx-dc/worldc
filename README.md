@@ -191,6 +191,8 @@ tools/push-api.mjs       git 端点不通时，走 REST API 推送
 与「零资产」承诺不冲突：主链路仍是纯程序；星海模式的 glb 与天空贴图都由脚本生成，
 随世界重新生成，仓库里只放一份 demo 产物（glb 111 KB + sky 344 KB）。
 
+- 水面：three.js 官方 `Water`（MIT，`viewer/vendor/Water.js`，只加了一个压暗系数）；
+  自研那套（波纹梯度 + 碎光 + 菲涅尔）留在 `?water=own`，`?water=0` 关水面
 - 设计与验收：`docs/space-mode.md`
 - 生成脚本：`tools/blender/space_scene.py`（环境与踩坑见同目录 README）
 - 页面：`viewer/space.html`

@@ -4,6 +4,9 @@
 
 import * as THREE from './vendor/three.module.js';
 import { GLTFLoader } from './vendor/GLTFLoader.js';
+// three.js 官方 Water（MIT，examples/jsm/objects/Water.js，r160）
+// 平面反射 + 滚动法线贴图 + 太阳高光 + 扭曲。用 ?water=lib 切换过来对比。
+import { Water } from './vendor/Water.js';
 import { parseWorld } from '../src/parse.mjs';
 import { compile } from '../src/compile.mjs';
 
@@ -283,7 +286,13 @@ function pump() {
 pump();
 
 // ── 水面：实时平面反射（spec 附录 A） ────────────────────────
-const WATER_ON = q.get('water') !== '0';
+// 水面有三种模式：
+//   默认        three.js 官方 Water（MIT，见 viewer/vendor/Water.js）
+//   ?water=own  我们自己写的那套（波纹梯度 + 碎光 + 菲涅尔）
+//   ?water=0    关掉
+const WATER_MODE = q.get('water');
+const WATER_ON = WATER_MODE !== '0';
+const WATER_LIB = WATER_ON && WATER_MODE !== 'own';
 const REFL_SCALE = Number(q.get('refl') ?? 0.75);  // 0.75 分辨率：倒影清楚得多，代价可接受
 
 const rtSize = new THREE.Vector2();
@@ -494,8 +503,34 @@ const water = new THREE.Mesh(
 );
 water.rotation.x = -Math.PI / 2;
 water.position.y = 0;
-water.visible = WATER_ON;
+water.visible = WATER_ON && !WATER_LIB;
 scene.add(water);
+
+// ── 官方 Water（可选）─────────────────────────────────────
+// 它自己做平面反射，所以开了它就不用再调 renderReflection()
+let libWater = null;
+if (WATER_LIB) {
+  const normals = new THREE.TextureLoader().load('./assets/waternormals.jpg', (t) => {
+    t.wrapS = t.wrapT = THREE.RepeatWrapping;
+  });
+  libWater = new Water(new THREE.PlaneGeometry(4000, 4000), {
+    textureWidth: 1024,
+    textureHeight: 1024,
+    waterNormals: normals,
+    sunDirection: new THREE.Vector3(0.10, 0.52, -0.85).normalize(),
+    sunColor: Number(q.get('libsun') ?? 0x5f7fae),
+    waterColor: Number(q.get('libcolor') ?? 0x060c18),
+    distortionScale: Number(q.get('libdist') ?? 2.8),
+    alpha: Number(q.get('libalpha') ?? 0.86),
+    fog: false,
+  });
+  libWater.material.uniforms.size.value = Number(q.get('libsize') ?? 3.2);
+  // 掠射角下几乎全是天空倒影，白天没错，夜里就灰得像水泥 —— 整体压暗
+  libWater.material.uniforms.uDim.value = Number(q.get('libdim') ?? 0.35);
+  libWater.rotation.x = -Math.PI / 2;
+  libWater.position.y = 0;
+  scene.add(libWater);
+}
 
 // 镜像相机
 const mirrorCam = new THREE.PerspectiveCamera();
@@ -983,8 +1018,12 @@ function tick() {
   camera.position.y = camY;
   camera.rotation.set(pitch, yaw, 0);
 
-  waterUniforms.uTime.value += dt;
-  renderReflection();
+  if (libWater) {
+    libWater.material.uniforms.time.value += dt * 0.30;
+  } else {
+    waterUniforms.uTime.value += dt;
+    renderReflection();
+  }
 
   if ((hudFrame++ & 7) === 0) updateHud();
   updateNear();
