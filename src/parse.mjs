@@ -244,7 +244,11 @@ class Parser {
         const item = this.peek().t === T.STR ? this.expectStr() : String(this.expectNum());
         const row = this.expectNum();
         const col = this.expectNum();
-        region.places.push({ item, row, col });
+        // 可选后缀 fresh：这件是「新来的」，走到跟前才点亮。
+        // 写成源码的一部分，而不是运行时状态 —— 它能被 diff、能被手改、能进历史。
+        const fresh = this.isIdent('fresh');
+        if (fresh) this.i++;
+        region.places.push({ item, row, col, fresh });
       } else if (kw.v === 'layout') {
         const kind = this.acceptIdent();
         if (!kind) throw new Error(`第 ${kw.line} 行：layout 后面要跟布局类型`);

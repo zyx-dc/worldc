@@ -54,7 +54,7 @@ export function compile(world, items) {
             `收藏夹里已经没有它了。删掉这一行，或把 items.json 换回旧快照。`,
           );
         }
-        return { key: p.item, item: it, row: p.row, col: p.col };
+        return { key: p.item, item: it, row: p.row, col: p.col, fresh: !!p.fresh };
       });
       members = entries.map(e => e.item);
       exhibits = layoutRegionV2(region, entries, world.seed);

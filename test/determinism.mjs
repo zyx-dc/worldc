@@ -162,9 +162,15 @@ check('D4 空间 diff：能定位到具体展品和位移', dPin.moved[0]?.id ==
   // 先 8 条，再合并 4 条
   const step = await mergeWorld(parseWorld(built.world), first, [...first, ...more]);
 
-  const hashAll = compile(parseWorld(all.world), [...first, ...more]).hash;
-  const hashStep = compile(parseWorld(step.world), [...first, ...more]).hash;
-  check('v2 分批导入与一次导入等价', hashAll === hashStep, `${hashAll.slice(0, 8)} vs ${hashStep.slice(0, 8)}`);
+  // 注意：两边的 hash 本来就不同 —— 合并出来的源码会给新条目打 fresh，
+  // 而一次导入不会。这里比的是「布局」是否一致，不是源码是否逐字相同。
+  const posOf = (w) => {
+    const ir = compile(parseWorld(w), [...first, ...more]).ir;
+    return [...ir.regions.flatMap(r => r.exhibits)]
+      .map(e => `${e.item}@${e.pos.join(',')}`).sort().join('|');
+  };
+  const same = posOf(all.world) === posOf(step.world);
+  check('v2 分批导入与一次导入落位一致', same, same ? '逐件坐标相同' : '有差异');
 }
 
 // v2 的三种错法都必须报错，而不是悄悄挪走别人
@@ -179,6 +185,38 @@ check('D4 空间 diff：能定位到具体展品和位移', dPin.moved[0]?.id ==
   check('v2 place 引用不存在的展品 → 报错', /不存在的展品/.test(e1), e1.slice(0, 20));
   check('v2 两件抢同一格 → 报错', /都落在格子/.test(e2), e2.slice(0, 20));
   check('v2 place 超出 grid → 报错', /超出 grid/.test(e3), e3.slice(0, 20));
+}
+
+// fresh：新收藏的标记要一路传到 IR，前端才知道该藏哪几件
+{
+  const items = mockItems(4, 'fr');
+  const src = [
+    'world "新收藏" {',
+    '  seed 3',
+    '  layout 2',
+    '  region "r" {',
+    '    layout grid 2 4',
+    '    place "mock_0" 0 0 fresh',
+    '    place "mock_1" 0 1',
+    '  }',
+    '}',
+    '',
+  ].join('\n');
+
+  const w = parseWorld(src);
+  check('place 的 fresh 后缀被解析', w.regions[0].places[0].fresh === true && w.regions[0].places[1].fresh === false);
+
+  const ir = compile(w, items).ir;
+  const ex = ir.regions[0].exhibits;
+  check('fresh 传到 IR，且只标一件', ex.find(e => e.item === 'mock_0')?.fresh === true && !ex.find(e => e.item === 'mock_1')?.fresh);
+
+  // 合并导入：新加入的自动带 fresh，老的不变
+  const base = mockItems(6, 'merge');
+  const built = await buildWorldFromItems(base, { title: '合并', source: 'x', seedKey: 'k1' });
+  const fresh2 = mockItems(2, 'new').map((it, i) => ({ ...it, key: `new_${i}`, ts: 9000 + i }));
+  const merged = await mergeWorld(parseWorld(built.world), base, [...base, ...fresh2]);
+  const hasFresh = merged.world.split('\n').filter(l => /place .* fresh$/.test(l)).length;
+  check('合并导入：新条目自动标记 fresh', hasFresh === 2, `带 fresh 的 place ${hasFresh} 条`);
 }
 
 // v1 冻结：没有 layout 指令的旧文件，IR 结构一字不改

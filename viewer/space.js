@@ -147,12 +147,44 @@ const HALO = (() => {
   return t;
 })();
 
+// 提示用的实心小光点：HALO 是环形、中心透明，做不了"远处一颗星"
+const HINT_DOT = (() => {
+  const S = 64;
+  const c = document.createElement('canvas');
+  c.width = c.height = S;
+  const g = c.getContext('2d');
+  const grd = g.createRadialGradient(S / 2, S / 2, 0, S / 2, S / 2, S / 2);
+  grd.addColorStop(0.0, 'rgba(255,255,255,1)');
+  grd.addColorStop(0.25, 'rgba(210,232,255,.55)');
+  grd.addColorStop(0.6, 'rgba(170,205,255,.12)');
+  grd.addColorStop(1.0, 'rgba(0,0,0,0)');
+  g.fillStyle = grd;
+  g.fillRect(0, 0, S, S);
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.SRGBColorSpace;
+  return t;
+})();
+
 // ── 加载建好的场 ────────────────────────────────────────────
 const gltf = await new GLTFLoader().loadAsync('./assets/space.glb');
 scene.add(gltf.scene);
 gltf.scene.updateMatrixWorld(true);
 
 const panels = [];       // { mesh, id, hero, region, center, size }
+
+// 「已经点亮过」记在本地：否则每次进来都要重新发现一遍，很烦。
+// 键里带世界名，换个收藏夹重新开始。
+const SEEN_KEY = `worldc:seen:${ir.world}`;
+function seenSet() {
+  try { return new Set(JSON.parse(localStorage.getItem(SEEN_KEY) || '[]')); } catch { return new Set(); }
+}
+const seenOnce = seenSet();
+const alreadySeen = (item) => seenOnce.has(item);
+function markSeen(item) {
+  seenOnce.add(item);
+  try { localStorage.setItem(SEEN_KEY, JSON.stringify([...seenOnce])); } catch { /* 隐私模式下写不进去，无所谓 */ }
+}
+const freshPanels = [];
 const seen = new Set();
 const box = new THREE.Box3();
 const tmpQ = new THREE.Quaternion();
@@ -252,8 +284,39 @@ gltf.scene.traverse((o) => {
     basePos: mesh.position.clone(),
     baseQuat: mesh.quaternion.clone(),
     yaw: 0,
+    // 新收藏：远处只是一个呼吸的光点，走近才展开成画框
+    fresh: !!info.fresh && !alreadySeen(info.item),
+    reveal: info.fresh && !alreadySeen(info.item) ? 0 : 1,
+    hint: null,
   });
 });
+
+// ── 新收藏：远处只有一颗呼吸的光点，走近才展开 ─────────────
+// 注意不能真的「什么都不显示」——那就永远找不到了。
+// 光点的作用是"这里有个东西，值得走过去看看"。
+for (const p of panels) {
+  if (!p.fresh) continue;
+
+  p.mesh.material.transparent = true;
+  p.mesh.material.opacity = 0;
+  if (p.rim) p.rim.material.opacity = 0;
+
+  const hint = new THREE.Sprite(new THREE.SpriteMaterial({
+    map: HALO,                 // 环形，不是实心点 —— 读起来像"还没打开"，不是又一颗星
+    color: 0xffc98a,           // 暖金，和蓝色画框、白色星光都区分得开
+    transparent: true,
+    opacity: 0.62,
+    blending: THREE.AdditiveBlending,
+    depthWrite: false,
+  }));
+  hint.scale.setScalar(2.8);
+  hint.position.copy(p.center);
+  hint.layers.set(NO_REFLECT);
+  scene.add(hint);
+
+  p.hint = hint;
+  freshPanels.push(p);
+}
 
 // ── 真实封面：并发 6，失败就保留程序化底图 ────────────────────
 const texLoader = new THREE.TextureLoader();
@@ -838,9 +901,9 @@ function updateGlow() {
     p.fade = fade;
     const near = p === nearPanel;
     for (let i = 0; i < p.halos.length; i++) {
-      p.halos[i].material.opacity = p.haloBase[i] * fade * (near ? 1 + 0.9 * hoverT : 1);
+      p.halos[i].material.opacity = p.haloBase[i] * fade * (near ? 1 + 0.9 * hoverT : 1) * p.reveal;
     }
-    if (p.rim) p.rim.material.opacity = p.rimBase * fade * (near ? 1 + 0.6 * hoverT : 1);
+    if (p.rim) p.rim.material.opacity = p.rimBase * fade * (near ? 1 + 0.6 * hoverT : 1) * p.reveal;
   }
 }
 
@@ -951,6 +1014,46 @@ function layoutPlayer() {
   playerEl.style.transform = `matrix3d(${m.map(v => +v.toFixed(8)).join(',')})`;
 }
 
+const REVEAL_D = 9;        // 走进这个距离开始点亮
+const REVEAL_SEC = 1.3;    // 展开用多久
+
+function updateFresh(dt, t) {
+  for (let i = freshPanels.length - 1; i >= 0; i--) {
+    const p = freshPanels[i];
+    const d = p.mesh.position.distanceTo(camera.position);
+
+    // 光点呼吸：越近越稳、越亮，远处只是一点若有若无的微光
+    if (p.hint) {
+      const pulse = 0.52 + 0.22 * Math.sin(t * 1.7 + p.center.x * 0.35);
+      p.hint.material.opacity = pulse * (1.0 - 0.35 * Math.min(1, d / 60));
+      p.hint.scale.setScalar(2.8 + 0.5 * Math.sin(t * 1.7 + p.center.z * 0.2));
+    }
+
+    if (d >= REVEAL_D) continue;
+
+    p.reveal = Math.min(1, p.reveal + dt / REVEAL_SEC);
+    const k = p.reveal * p.reveal * (3 - 2 * p.reveal);   // smoothstep
+    p.mesh.material.opacity = k;
+
+    if (p.reveal >= 1) {
+      p.fresh = false;
+      // 展开完恢复不透明：一直开着 transparent 会露馅
+      // （后面的画框会从这块画里透出来，而且深度写入也乱了）
+      p.mesh.material.transparent = false;
+      p.mesh.material.depthWrite = true;
+      p.mesh.material.opacity = 1;
+      p.mesh.material.needsUpdate = true;
+      if (p.hint) {
+        scene.remove(p.hint);
+        p.hint.material.dispose();
+        p.hint = null;
+      }
+      markSeen(p.id);      // 点亮过就记住，下次不再藏
+      freshPanels.splice(i, 1);
+    }
+  }
+}
+
 function updateNear() {
   let best = null, bestD = Infinity;
   for (const p of panels) {
@@ -973,6 +1076,12 @@ function updateNear() {
       cardEl.classList.remove('on');
     }
   }
+  // 新收藏：点亮之前不显示标题，否则"惊喜"在路上就被剧透了
+  if (nearPanel && nearPanel.reveal < 0.85) {
+    cardTitle.textContent = '？？？';
+    cardMeta.textContent = '新收藏 · 再走近一点';
+  }
+
   // 播放时把信息卡收掉，别压在播放器下面
   if (playing) cardEl.classList.remove('on');
 
@@ -1027,6 +1136,7 @@ function tick() {
 
   if ((hudFrame++ & 7) === 0) updateHud();
   updateNear();
+  updateFresh(dt, performance.now() / 1000);
   updateGlow();
   renderer.render(scene, camera);
   requestAnimationFrame(tick);
@@ -1042,7 +1152,9 @@ function updateHud() {
   if (!best) return;
   const info = metaById.get(best.id) || {};
   $('regionName').textContent = best.region || '星海';
-  $('regionMeta').textContent = `${info.year ?? ''}　${panels.length} 件`;
+  const left = freshPanels.length;
+  $('regionMeta').textContent =
+    `${info.year ?? ''}　${panels.length} 件${left ? `　·　${left} 处待点亮` : ''}`;
 }
 
 addEventListener('resize', () => {

@@ -16,9 +16,9 @@ world "泛式生贺合集" {
   region "泛式生贺" {
     hue 210
     layout grid 5 6
-    place "bv_BV1bc41147oe" 0 0
-    place "bv_BV1aZ421z7nd" 0 1
-    place "bv_BV1t7421K7pL" 0 2
+    place "bv_BV1bc41147oe" 0 0 fresh
+    place "bv_BV1aZ421z7nd" 0 1 fresh
+    place "bv_BV1t7421K7pL" 0 2 fresh
     place "bv_BV1o4421A7cX" 0 3
     place "bv_BV15Z421U7Ah" 0 4
     place "bv_BV1uZ421U7ar" 0 5

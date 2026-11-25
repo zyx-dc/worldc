@@ -129,7 +129,11 @@ export function layoutRegionV2(region, entries, seed) {
     cellByKey.set(e.key, cell);
   }
 
-  return entries.map(e => makeExhibit(e.item, seed, region.name, rows, cols, cellByKey.get(e.key)));
+  return entries.map(e => {
+    const ex = makeExhibit(e.item, seed, region.name, rows, cols, cellByKey.get(e.key));
+    if (e.fresh) ex.fresh = true;
+    return ex;
+  });
 }
 
 /** region 自身的体量（用于渲染时画地板和墙） */

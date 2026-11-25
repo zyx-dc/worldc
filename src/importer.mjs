@@ -58,7 +58,7 @@ function renderWorld({ title, source, seed, regions, totalItems, note }) {
       `    layout grid ${r.rows} ${r.cols}`,
     );
     for (const e of r.entries) {
-      body.push(`    place ${esc(e.key)} ${Math.floor(e.cell / r.cols)} ${e.cell % r.cols}`);
+      body.push(`    place ${esc(e.key)} ${Math.floor(e.cell / r.cols)} ${e.cell % r.cols}${e.fresh ? ' fresh' : ''}`);
     }
     body.push('  }', '');
   }
@@ -186,7 +186,7 @@ export async function mergeWorld(existing, oldItems, newItems, opt = {}) {
       const occupied = new Set(r.entries.map(e => e.cell));
       const cell = firstFreeCell(r.rows, r.cols, occupied);
       if (cell == null) continue;
-      r.entries.push({ key, cell });
+      r.entries.push({ key, cell, fresh: true });
       added.push({ key, region: r.name, cell });
       done = true;
     }
