@@ -284,6 +284,8 @@ gltf.scene.traverse((o) => {
     basePos: mesh.position.clone(),
     baseQuat: mesh.quaternion.clone(),
     yaw: 0,
+    normal: normal.clone(),   // 世界空间的正法线
+    facing: 1,                // 相机在正面(>0)还是背面(<0)，每帧更新
     // 新收藏：远处只是一个呼吸的光点，走近才展开成画框
     fresh: !!info.fresh && !alreadySeen(info.item),
     reveal: info.fresh && !alreadySeen(info.item) ? 0 : 1,
@@ -747,7 +749,13 @@ addEventListener('keydown', (e) => {
   keys[e.code] = true;
   if (e.code === 'Space') e.preventDefault();   // 别让空格滚页面
   if (e.code === 'Backquote') location.href = EDIT ? './?gate=0' : './?edit=1';
-  if (e.code === 'KeyF' && nearPanel && !playing) openPlayer(nearPanel);
+  if (e.code === 'KeyF' && nearPanel && !playing) {
+    if (nearPanel.facing < 0.10) {
+      cardHint.textContent = '绕到正面再播';   // 背面不给你开
+    } else {
+      openPlayer(nearPanel);
+    }
+  }
   if (e.code === 'Escape') {
     if (playing) { closePlayer(); return; }
     if (EDIT) location.href = './?gate=0';
@@ -891,11 +899,16 @@ function updateGlow() {
     const d = p.mesh.position.distanceTo(camera.position);
     let fade = smoothstep(2.5, 9, d);          // 2.5m 内关掉，9m 外恢复
 
+    // 朝向要每帧都算，包括贴脸的时候 —— 它决定了"算不算靠近"，
+    // 只在远处更新会读到旧值，走到背后也可能被当成正面。
+    _glowN.copy(PLANE_FRONT).applyQuaternion(p.mesh.getWorldQuaternion(_glowQ));
+    _glowV.copy(camera.position).sub(p.mesh.position).normalize();
+    p.normal.copy(_glowN);
+    p.facing = _glowN.dot(_glowV);   // >0 正面，<0 背面
+
     if (fade > 0) {
-      _glowN.copy(PLANE_FRONT).applyQuaternion(p.mesh.getWorldQuaternion(_glowQ));
-      _glowV.copy(camera.position).sub(p.mesh.position).normalize();
       // 法线与视线接近垂直 = 正侧着看，画框本身都看不见了，光晕不该还亮着
-      fade *= smoothstep(0.10, 0.45, Math.abs(_glowN.dot(_glowV)));
+      fade *= smoothstep(0.10, 0.45, Math.abs(p.facing));
     }
 
     p.fade = fade;
@@ -1057,6 +1070,9 @@ function updateFresh(dt, t) {
 function updateNear() {
   let best = null, bestD = Infinity;
   for (const p of panels) {
+    // 站在背面不算「靠近」：否则卡片会浮出来、F 也能按，
+    // 但播放器贴在正面，你只会听见声音看不见画面。
+    if (p.facing < 0.10) continue;
     const d = p.mesh.position.distanceTo(camera.position);
     if (d < bestD) { bestD = d; best = p; }
   }
@@ -1089,7 +1105,7 @@ function updateNear() {
   hoverT += ((nearPanel ? 1 : 0) - hoverT) * 0.12;
 
   if (playing) {
-    if (bestD > PLAY_FAR) { closePlayer(); return; }
+    if (bestD > PLAY_FAR || playing.facing < 0.10) { closePlayer(); return; }
     layoutPlayer();
   }
 }
@@ -1175,6 +1191,7 @@ window.space = {
   get nearPanel() { return nearPanel; },
   get playing() { return playing; },
   get bvidCount() { return bvidById.size; },
+  get near() { return nearPanel; },   // 调试用：当前算作「靠近」的那一块
   get src() { return srcText; },
   set src(v) { srcText = v; if (ta) ta.value = v; recompile(); },
   editor: ta,
