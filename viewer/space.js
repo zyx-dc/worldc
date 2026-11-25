@@ -749,13 +749,7 @@ addEventListener('keydown', (e) => {
   keys[e.code] = true;
   if (e.code === 'Space') e.preventDefault();   // 别让空格滚页面
   if (e.code === 'Backquote') location.href = EDIT ? './?gate=0' : './?edit=1';
-  if (e.code === 'KeyF' && nearPanel && !playing) {
-    if (nearPanel.facing < 0.10) {
-      cardHint.textContent = '绕到正面再播';   // 背面不给你开
-    } else {
-      openPlayer(nearPanel);
-    }
-  }
+  if (e.code === 'KeyF' && nearPanel && !playing) openPlayer(nearPanel);
   if (e.code === 'Escape') {
     if (playing) { closePlayer(); return; }
     if (EDIT) location.href = './?gate=0';
@@ -988,9 +982,9 @@ function layoutPlayer() {
   if (!playing) return;
   const mesh = playing.mesh;
 
-  normal.copy(PLANE_FRONT).applyQuaternion(mesh.getWorldQuaternion(tmpQ));
-  _wpos.copy(camera.position).sub(mesh.position);
-  if (normal.dot(_wpos) <= 0.05) { playerEl.style.display = 'none'; return; }   // 背面
+  // 不判断正反面：从哪一面按的播放，就在哪一面放。
+  // 下面四个角是按「屏幕位置」排的（TL 取屏幕左上角那个点），
+  // 所以从背面看时，映射出来的画面是正的 —— 不是镜像。
 
   const pts = [];
   for (const [x, z] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) {
@@ -1070,9 +1064,6 @@ function updateFresh(dt, t) {
 function updateNear() {
   let best = null, bestD = Infinity;
   for (const p of panels) {
-    // 站在背面不算「靠近」：否则卡片会浮出来、F 也能按，
-    // 但播放器贴在正面，你只会听见声音看不见画面。
-    if (p.facing < 0.10) continue;
     const d = p.mesh.position.distanceTo(camera.position);
     if (d < bestD) { bestD = d; best = p; }
   }
@@ -1105,7 +1096,7 @@ function updateNear() {
   hoverT += ((nearPanel ? 1 : 0) - hoverT) * 0.12;
 
   if (playing) {
-    if (bestD > PLAY_FAR || playing.facing < 0.10) { closePlayer(); return; }
+    if (bestD > PLAY_FAR) { closePlayer(); return; }
     layoutPlayer();
   }
 }
