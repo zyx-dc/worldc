@@ -977,7 +977,7 @@ function homography(s, d) {
 const _wpos = new THREE.Vector3();
 const _proj = new THREE.Vector3();
 
-/** 把播放器贴到画框平面上；看到背面或完全出屏就藏起来 */
+/** 把播放器贴到画框平面上；两面都贴，只有完全出屏才藏 */
 function layoutPlayer() {
   if (!playing) return;
   const mesh = playing.mesh;
